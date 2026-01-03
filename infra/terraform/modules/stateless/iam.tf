@@ -32,7 +32,7 @@ resource "aws_iam_role_policy" "lambda_ingest" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:*:*:*"  # Wildcard necessary for CloudWatch Logs (unavoidable)
+        Resource = "arn:aws:logs:*:*:log-group:/aws/lambda/${var.project_name}-*"
       },
       {
         Effect = "Allow"
@@ -98,7 +98,7 @@ resource "aws_iam_role_policy" "lambda_processor" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:*:*:*"  # Wildcard necessary for CloudWatch Logs (unavoidable)
+        Resource = "arn:aws:logs:*:*:log-group:/aws/lambda/${var.project_name}-*"
       },
       {
         Effect = "Allow"
@@ -190,7 +190,7 @@ resource "aws_iam_role_policy" "lambda_query" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:*:*:*"  # Wildcard necessary for CloudWatch Logs (unavoidable)
+        Resource = "arn:aws:logs:*:*:log-group:/aws/lambda/${var.project_name}-*"
       },
       {
         Effect = "Allow"

@@ -36,14 +36,22 @@ graph TB
 
 For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Quick Start
+## 🚀 Quick Start & Verification
 
-### Prerequisites
+**Want to see it in action?**
+👉 **[View the Step-by-Step DEMO Walkthrough](docs/DEMO.md)**
 
-- Go 1.21 or later
-- Terraform 1.0 or later
-- AWS CLI configured with appropriate credentials
-- PostgreSQL client (for database migrations)
+> **Pro Tip**: Run the full local integration suite in 10 seconds:
+> ```bash
+> make local-up   # Start Postgres
+> make local-test # Run 50-concurrency idempotency + failure drills
+> ```
+
+## 📚 Documentation
+- **[Architecture & Trade-offs](docs/TRADEOFFS.md)**
+- **[Operational Runbook](docs/RUNBOOK.md)**: DLQ triage, replays, and alerts.
+- **[Infrastructure](infra/terraform/README.md)**: Terraform modules and deployment.
+- **[Release Notes](RELEASE_NOTES.md)**: v1.1.0 changelog.
 
 ### Local Development Setup
 
@@ -546,45 +554,111 @@ export API_ENDPOINT=https://your-api-id.execute-api.us-east-1.amazonaws.com/dev
 - [Runbook](docs/RUNBOOK.md) - Operational procedures and troubleshooting
 - [Tradeoffs](docs/TRADEOFFS.md) - Design decisions and alternatives
 
-## Portfolio Proof
+## Portfolio Proof (5–10 Minute Verification)
 
-Use this checklist to verify a successful deployment:
+This project is designed to be easily verifiable by reviewers. Follow the steps below to confirm correctness, reliability, and observability.
 
-- [ ] **Terraform Apply**: Infrastructure deploys successfully (`terraform apply` completes)
-- [ ] **Migrations**: Database migrations run without errors
-- [ ] **Ingest**: POST /events returns `event_id` and status 'enqueued'
-- [ ] **Query**: GET /events/{event_id} returns event data within 30 seconds
-- [ ] **CloudWatch Metrics**: Metrics show `ingest_success` and `processed_success` in CloudWatch console
-- [ ] **Alarms**: All CloudWatch alarms in OK state (no DLQ messages, no Lambda errors)
+### 1. Deploy Infrastructure
+```bash
+cd infra/terraform/envs/dev
+terraform init
+terraform apply
+```
 
-Run `./scripts/verify_dev.sh` for automated verification after deployment.
+Expected:
 
-### Metrics Capture
+* Terraform completes without errors
+* AWS resources created (Lambda, SQS + DLQ, S3, RDS, API Gateway)
 
-We provide an automated pipeline to generate "resume-ready" performance metrics.
+---
 
-1. **Run the capture script**:
+### 2. Run Database Migrations
 
-   ```bash
-   export API_ENDPOINT=$(terraform output -raw api_endpoint)
-   ./scripts/capture_metrics.sh -n 1000 -c 50
-   ```
+```bash
+psql -h <db_host> -U <db_user> -d fluxa -f migrations/001_create_events_table.sql
+psql -h <db_host> -U <db_user> -d fluxa -f migrations/002_create_idempotency_keys_table.sql
+```
 
-2. **View the report**:
+Expected:
 
-   The script generates a Markdown summary in `out/metrics.md`:
+* Tables created successfully
+* No migration errors
 
-   ```markdown
-   ### Performance Metrics (Automated Capture)
-   | Metric | Measured Value | Target (SLO) | Status |
-   |--------|---------------|--------------|--------|
-   | **Ingest p95 Latency** | **45 ms** | < 200 ms | ✅ |
-   | **End-to-End p95** | **850 ms** | < 1000 ms | ✅ |
-   | **Throughput (1h)** | **15,400** | - | ℹ️ |
-   | **Error Rate** | **0.00%** | < 0.1% | ✅ |
-   ```
+---
 
-**See [docs/METRICS_CAPTURE.md](docs/METRICS_CAPTURE.md) for full details.**
+### 3. Ingest an Event
+
+```bash
+curl -X POST $API_ENDPOINT/events \
+  -H "Content-Type: application/json" \
+  -H "X-Correlation-ID: demo-$(date +%s)" \
+  -d '{
+    "user_id": "demo_user",
+    "amount": 42.50,
+    "currency": "USD",
+    "merchant": "Demo Store",
+    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+  }'
+```
+
+Expected:
+
+* Response includes `event_id`
+* Status is `enqueued`
+
+---
+
+### 4. Query the Event
+
+```bash
+curl $API_ENDPOINT/events/<event_id>
+```
+
+Expected:
+
+* Event returned within ~30 seconds
+* Data matches ingested payload
+
+---
+
+### 5. Verify Observability
+
+* **CloudWatch Metrics**
+  * `ingest_success`
+  * `processed_success`
+* **CloudWatch Logs**
+  * Structured JSON logs
+  * Correlation ID visible end-to-end
+* **Alarms**
+  * All alarms in OK state
+  * DLQ depth = 0
+
+---
+
+### 6. Capture Performance Metrics (Optional, Resume-Grade)
+
+```bash
+./scripts/capture_metrics.sh
+```
+
+Generates:
+
+* p95 ingest latency
+* p95 processing latency
+* Throughput (events/min)
+* Error and DLQ counts
+
+Outputs saved to `out/metrics.md` and `out/metrics.json`.
+
+---
+
+### 7. Failure & Recovery Drill (Optional)
+
+* Send malformed payload → validation error
+* Simulate processor failure → message routed to DLQ
+* Replay DLQ safely (idempotent)
+
+See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) for exact commands.
 
 ## License
 
