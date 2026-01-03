@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
 	"github.com/fluxa/fluxa/internal/models"
+	_ "github.com/lib/pq"
 )
 
 // getTestDB returns a test database connection (requires TEST_DB_DSN env var)
@@ -199,4 +199,63 @@ func TestIdempotency_EndToEnd(t *testing.T) {
 	}
 }
 
+func TestCheckAndMark_ConcurrentCalls_OnlyOneSucceeds(t *testing.T) {
+	db := getTestDB(t)
+	client := NewClient(db)
 
+	eventID := "test-concurrent-" + time.Now().Format("20060102150405")
+	concurrency := 50
+
+	// Channel to coordinate start of all goroutines
+	startCh := make(chan struct{})
+	// Channel to collect results
+	resultsCh := make(chan bool, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			<-startCh // Wait for signal to start
+
+			// Try to acquire lock
+			alreadyProcessed, err := client.CheckAndMark(eventID)
+			if err != nil {
+				// In a real race, some DB errors (serialization failure) might occur
+				// But our logic handles locking, so we expect mostly success or alreadyProcessed
+				// We log error but don't fail test immediately to avoid race on t.Fail
+				t.Logf("CheckAndMark error: %v", err)
+				resultsCh <- true // Treat error as "didn't succeed in claiming"
+				return
+			}
+
+			if !alreadyProcessed {
+				resultsCh <- true // I claimed it!
+			} else {
+				resultsCh <- false // Already taken
+			}
+		}()
+	}
+
+	// Release the hounds!
+	close(startCh)
+
+	// Collect results
+	successCount := 0
+	for i := 0; i < concurrency; i++ {
+		if <-resultsCh {
+			successCount++
+		}
+	}
+
+	if successCount != 1 {
+		t.Errorf("Expected exactly 1 client to succeed, got %d", successCount)
+	}
+
+	// Verify DB state has exactly 1 record
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM idempotency_keys WHERE event_id = $1", eventID).Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query DB: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 idempotency record, found %d", count)
+	}
+}
