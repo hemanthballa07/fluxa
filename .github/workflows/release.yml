@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test-and-lint:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Check test coverage
+        run: |
+          go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%.*//' > coverage_percentage.txt
+          COVERAGE=$(cat coverage_percentage.txt)
+          echo "Total coverage: $COVERAGE%"
+          if (( $(echo "$COVERAGE < 60" | bc -l) )); then
+            echo "Code coverage is below 60%!"
+            exit 1
+          fi
+
+      - name: Run gofmt check
+        run: |
+          DIFF=$(gofmt -d .)
+          if [ -n "$DIFF" ]; then
+            echo "gofmt found issues:"
+            echo "$DIFF"
+            exit 1
+          fi
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+
+      - name: Terraform fmt
+        run: |
+          terraform fmt -check -recursive infra/
+
+      - name: Terraform validate
+        run: |
+          cd infra/terraform/envs/dev
+          terraform init -backend=false
+          terraform validate
+
+  create-release:
+    name: Create GitHub Release
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Get release notes
+        id: release_notes
+        run: |
+          if [ -f RELEASE_NOTES.md ]; then
+            RELEASE_NOTES=$(cat RELEASE_NOTES.md)
+            # Escape for GitHub Actions
+            RELEASE_NOTES="${RELEASE_NOTES//'%'/'%25'}"
+            RELEASE_NOTES="${RELEASE_NOTES//$'\n'/'%0A'}"
+            RELEASE_NOTES="${RELEASE_NOTES//$'\r'/'%0D'}"
+            echo "notes<<EOF" >> $GITHUB_OUTPUT
+            echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "notes=Release ${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
