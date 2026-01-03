@@ -9,25 +9,43 @@ import (
 
 // Metrics handles CloudWatch Embedded Metric Format (EMF) logging
 type Metrics struct {
-	namespace string
+	namespace         string
+	defaultDimensions map[string]string
 }
 
-// NewMetrics creates a new metrics logger
-func NewMetrics(namespace string) *Metrics {
+// NewMetrics creates a new metrics logger with service and env dimensions
+func NewMetrics(namespace, service string) *Metrics {
+	env := os.Getenv("CONFIG_ENV")
+	if env == "" {
+		env = "dev"
+	}
 	return &Metrics{
 		namespace: namespace,
+		defaultDimensions: map[string]string{
+			"Service":     service,
+			"Environment": env,
+		},
 	}
 }
 
 // EmitMetric emits a CloudWatch metric using EMF
 func (m *Metrics) EmitMetric(metricName string, value float64, unit string, dimensions map[string]string) error {
+	// Merge default dimensions with provided dimensions
+	allDimensions := make(map[string]string)
+	for k, v := range m.defaultDimensions {
+		allDimensions[k] = v
+	}
+	for k, v := range dimensions {
+		allDimensions[k] = v
+	}
+
 	// Convert to proper EMF format
 	emfData := map[string]interface{}{
 		"_aws": map[string]interface{}{
 			"CloudWatchMetrics": []map[string]interface{}{
 				{
 					"Namespace":  m.namespace,
-					"Dimensions": buildDimensions(dimensions),
+					"Dimensions": buildDimensions(allDimensions),
 					"Metrics": []map[string]interface{}{
 						{
 							"MetricName": metricName,
@@ -42,7 +60,7 @@ func (m *Metrics) EmitMetric(metricName string, value float64, unit string, dime
 	}
 
 	// Add dimensions as fields
-	for k, v := range dimensions {
+	for k, v := range allDimensions {
 		emfData[k] = v
 	}
 
@@ -61,13 +79,12 @@ func buildDimensions(dims map[string]string) [][]string {
 	}
 
 	keys := make([]string, 0, len(dims))
-	values := make([]string, 0, len(dims))
-	for k, v := range dims {
+	for k := range dims {
 		keys = append(keys, k)
-		values = append(values, v)
 	}
 
-	return [][]string{keys, values}
+	// EMF Dimensions is a list of lists of dimension names
+	return [][]string{keys}
 }
 
 func getTimestamp() int64 {

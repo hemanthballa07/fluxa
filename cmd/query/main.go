@@ -28,7 +28,7 @@ func init() {
 		os.Exit(1)
 	}
 
-	metricsClient = metrics.NewMetrics("Fluxa/Query")
+	metricsClient = metrics.NewMetrics("Fluxa", "query")
 
 	dbClient, err = db.NewClient(cfg.DSN(), 10)
 	if err != nil {
@@ -44,7 +44,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		correlationID = request.RequestContext.RequestID
 	}
 
-	logger := logging.NewLogger(correlationID)
+	logger := logging.NewLogger("query", correlationID)
 	logger.Info("Received query request", map[string]interface{}{
 		"path":       request.Path,
 		"method":     request.HTTPMethod,
@@ -102,16 +102,16 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	// Convert to response format
 	response := map[string]interface{}{
-		"event_id":      record.EventID,
+		"event_id":       record.EventID,
 		"correlation_id": record.CorrelationID,
-		"user_id":       record.UserID,
-		"amount":        record.Amount,
-		"currency":      record.Currency,
-		"merchant":      record.Merchant,
-		"timestamp":     record.Timestamp.Format("2006-01-02T15:04:05Z07:00"),
-		"metadata":      record.Metadata,
-		"payload_mode":  record.PayloadMode,
-		"created_at":    record.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"user_id":        record.UserID,
+		"amount":         record.Amount,
+		"currency":       record.Currency,
+		"merchant":       record.Merchant,
+		"timestamp":      record.Timestamp.Format("2006-01-02T15:04:05Z07:00"),
+		"metadata":       record.Metadata,
+		"payload_mode":   record.PayloadMode,
+		"created_at":     record.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if record.S3Key != nil {
 		response["s3_key"] = *record.S3Key
@@ -130,5 +130,3 @@ func main() {
 	defer dbClient.Close()
 	lambda.Start(handler)
 }
-
-
