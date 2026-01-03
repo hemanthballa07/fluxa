@@ -34,7 +34,7 @@ func TestProcessor_DuplicateMessage(t *testing.T) {
 	defer dbClient.Close()
 
 	idemClient := idempotency.NewClient(dbClient.GetDB())
-	metricsClient := metrics.NewMetrics("Fluxa/Test")
+	metricsClient := metrics.NewMetrics("Fluxa", "test")
 	logger := logging.NewLogger("test", "test-corr-id")
 
 	proc := &Processor{
@@ -97,7 +97,7 @@ func TestProcessor_HashMismatch_NoRetry(t *testing.T) {
 	defer dbClient.Close()
 
 	idemClient := idempotency.NewClient(dbClient.GetDB())
-	metricsClient := metrics.NewMetrics("Fluxa/Test")
+	metricsClient := metrics.NewMetrics("Fluxa", "test")
 	logger := logging.NewLogger("test", "test-corr-id")
 
 	proc := &Processor{

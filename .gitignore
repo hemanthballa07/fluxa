@@ -45,6 +45,6 @@ terraform.tfstate.backup
 
 # Build artifacts
 bootstrap
-ingest
-processor
-query
+/ingest
+/processor
+/query
