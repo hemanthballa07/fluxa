@@ -547,21 +547,32 @@ Use this checklist to verify a successful deployment:
 
 Run `./scripts/verify_dev.sh` for automated verification after deployment.
 
-### Metrics to Replace Placeholders
+### Metrics Capture
 
-After deployment and load testing, replace placeholders in resume bullets with actual captured metrics:
+We provide an automated pipeline to generate "resume-ready" performance metrics.
 
-| Metric                      | Placeholder | How to Capture                                                    | Notes                          |
-| --------------------------- | ----------- | ----------------------------------------------------------------- | ------------------------------ |
-| `ingest_p95_ms`             | TBD         | CloudWatch Metrics → Fluxa/Ingest → `ingest_latency_ms` p95       | API Gateway + Lambda latency   |
-| `process_p95_ms`            | TBD         | CloudWatch Metrics → Fluxa/Processor → `process_latency_ms` p95   | End-to-end processing latency  |
-| `throughput_events_per_min` | TBD         | Load test script output OR CloudWatch `ingest_success` sum/minute | System throughput              |
-| `terraform_apply_minutes`   | TBD         | Time `terraform apply` command execution                          | Infrastructure deployment time |
-| `end_to_end_async_p95_ms`   | TBD         | Custom script (ingest time to query time) - Optional              | Full async pipeline latency    |
+1. **Run the capture script**:
 
-**See `docs/METRICS_CAPTURE.md` for detailed step-by-step instructions on capturing these metrics.**
+   ```bash
+   export API_ENDPOINT=$(terraform output -raw api_endpoint)
+   ./scripts/capture_metrics.sh -n 1000 -c 50
+   ```
 
-**Run load test**: `./scripts/load_test.sh` or `NUM_EVENTS=2000 CONCURRENCY=50 ./scripts/load_test.sh`
+2. **View the report**:
+
+   The script generates a Markdown summary in `out/metrics.md`:
+
+   ```markdown
+   ### Performance Metrics (Automated Capture)
+   | Metric | Measured Value | Target (SLO) | Status |
+   |--------|---------------|--------------|--------|
+   | **Ingest p95 Latency** | **45 ms** | < 200 ms | ✅ |
+   | **End-to-End p95** | **850 ms** | < 1000 ms | ✅ |
+   | **Throughput (1h)** | **15,400** | - | ℹ️ |
+   | **Error Rate** | **0.00%** | < 0.1% | ✅ |
+   ```
+
+**See [docs/METRICS_CAPTURE.md](docs/METRICS_CAPTURE.md) for full details.**
 
 ## License
 
