@@ -85,7 +85,19 @@ For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITE
 
 ### Local Test Harness
 
-Test the full flow locally without AWS:
+We provide a standalone Go program to verify core logic without deploying to AWS. This harness tests:
+
+1.  **Idempotency**: Verifies exactly-once processing by simulating duplicate events and inspecting DB state.
+2.  **Schema Validation**: Ensures invalid payloads are rejected with correct error codes.
+3.  **Large Payloads**: Simulates payload size checks (logic for S3 offloading).
+
+**Run the harness:**
+
+```bash
+make local-test
+```
+
+*Prerequisite*: `make local-up` must be running.
 
 1. **Start local PostgreSQL:**
 
