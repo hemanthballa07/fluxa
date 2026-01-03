@@ -84,6 +84,7 @@ func (p *Processor) ProcessMessage(sqsMsg *models.SQSEventMessage) error {
 		return p.failPermanent(sqsMsg.EventID, "unmarshal_error")
 	}
 
+	event.EventID = sqsMsg.EventID
 	// 5. Persist to DB
 	dbStartTime := time.Now()
 	var s3Key *string
