@@ -22,13 +22,13 @@ resource "aws_sqs_queue" "dlq" {
 resource "aws_sqs_queue" "main" {
   name = "${var.project_name}-queue-${var.environment}"
 
-  visibility_timeout_seconds = 300 # 5 minutes - 6x processor timeout (50s) to prevent re-delivery
+  visibility_timeout_seconds = 300    # 5 minutes - 6x processor timeout (50s) to prevent re-delivery
   message_retention_seconds  = 345600 # 4 days - default retention
-  receive_wait_time_seconds  = 20 # Long polling - reduces empty receives
+  receive_wait_time_seconds  = 20     # Long polling - reduces empty receives
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.dlq.arn
-    maxReceiveCount     = 3  # Permanent failures go to DLQ after 3 retries
+    maxReceiveCount     = 3 # Permanent failures go to DLQ after 3 retries
   })
 
   tags = merge(

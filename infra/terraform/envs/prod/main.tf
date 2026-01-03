@@ -88,17 +88,17 @@ resource "aws_security_group" "rds" {
 module "stateful" {
   source = "../../modules/stateful"
 
-  environment        = "prod"
-  project_name       = "fluxa"
-  db_instance_class  = var.db_instance_class
-  db_name            = "fluxa"
-  db_username        = var.db_username
-  db_password        = var.db_password
-  vpc_id             = var.vpc_id
-  subnet_ids         = var.subnet_ids
-  security_group_id  = aws_security_group.rds.id
-  multi_az           = true
-  skip_final_snapshot = false
+  environment             = "prod"
+  project_name            = "fluxa"
+  db_instance_class       = var.db_instance_class
+  db_name                 = "fluxa"
+  db_username             = var.db_username
+  db_password             = var.db_password
+  vpc_id                  = var.vpc_id
+  subnet_ids              = var.subnet_ids
+  security_group_id       = aws_security_group.rds.id
+  multi_az                = true
+  skip_final_snapshot     = false
   backup_retention_period = 30
 
   tags = {
@@ -111,22 +111,22 @@ module "stateful" {
 module "stateless" {
   source = "../../modules/stateless"
 
-  environment            = "prod"
-  project_name           = "fluxa"
+  environment               = "prod"
+  project_name              = "fluxa"
   lambda_ingest_zip_path    = var.lambda_ingest_zip_path
   lambda_processor_zip_path = var.lambda_processor_zip_path
   lambda_query_zip_path     = var.lambda_query_zip_path
 
-  db_host             = module.stateful.db_address
-  db_name             = module.stateful.db_name
-  db_user             = module.stateful.db_username
+  db_host                = module.stateful.db_address
+  db_name                = module.stateful.db_name
+  db_user                = module.stateful.db_username
   db_password_secret_arn = module.stateful.db_password_secret_arn
 
   s3_payload_bucket_name = "fluxa-payloads-prod-${random_id.bucket_suffix.hex}"
 
-  vpc_id             = var.vpc_id
-  subnet_ids         = var.subnet_ids
-  security_group_id  = aws_security_group.lambda.id
+  vpc_id            = var.vpc_id
+  subnet_ids        = var.subnet_ids
+  security_group_id = aws_security_group.lambda.id
 
   tags = {
     Environment = "prod"

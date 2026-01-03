@@ -110,23 +110,23 @@ module "stateful" {
 module "stateless" {
   source = "../../modules/stateless"
 
-  environment          = "dev"
-  project_name         = "fluxa"
-  lambda_ingest_zip_path  = var.lambda_ingest_zip_path
+  environment               = "dev"
+  project_name              = "fluxa"
+  lambda_ingest_zip_path    = var.lambda_ingest_zip_path
   lambda_processor_zip_path = var.lambda_processor_zip_path
-  lambda_query_zip_path    = var.lambda_query_zip_path
-  
-  db_host             = module.stateful.db_address
-  db_name             = module.stateful.db_name
-  db_user             = module.stateful.db_username
+  lambda_query_zip_path     = var.lambda_query_zip_path
+
+  db_host                = module.stateful.db_address
+  db_name                = module.stateful.db_name
+  db_user                = module.stateful.db_username
   db_password_secret_arn = module.stateful.db_password_secret_arn
-  
+
   s3_payload_bucket_name = "fluxa-payloads-dev-${random_id.bucket_suffix.hex}"
-  
+
   # Use VPC for Lambda to connect to RDS (required for RDS access)
-  vpc_id             = data.aws_vpc.default.id
-  subnet_ids         = data.aws_subnets.default.ids
-  security_group_id  = aws_security_group.lambda.id
+  vpc_id            = data.aws_vpc.default.id
+  subnet_ids        = data.aws_subnets.default.ids
+  security_group_id = aws_security_group.lambda.id
 
   tags = {
     Environment = "dev"

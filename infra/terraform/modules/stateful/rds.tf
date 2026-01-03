@@ -68,14 +68,14 @@ resource "aws_secretsmanager_secret_version" "db_password" {
 
 # RDS Instance
 resource "aws_db_instance" "main" {
-  identifier             = "${var.project_name}-db-${var.environment}"
-  engine                 = "postgres"
-  engine_version         = "15.4"
-  instance_class         = var.db_instance_class
-  allocated_storage      = var.allocated_storage
-  max_allocated_storage  = var.max_allocated_storage
-  storage_type           = "gp3"
-  storage_encrypted      = true
+  identifier            = "${var.project_name}-db-${var.environment}"
+  engine                = "postgres"
+  engine_version        = "15.4"
+  instance_class        = var.db_instance_class
+  allocated_storage     = var.allocated_storage
+  max_allocated_storage = var.max_allocated_storage
+  storage_type          = "gp3"
+  storage_encrypted     = true
 
   db_name  = var.db_name
   username = var.db_username
@@ -89,13 +89,13 @@ resource "aws_db_instance" "main" {
   backup_window           = "03:00-04:00"
   maintenance_window      = "mon:04:00-mon:05:00"
 
-  multi_az               = var.multi_az
-  publicly_accessible    = false  # Always false - RDS in private subnets
-  skip_final_snapshot    = var.skip_final_snapshot  # Only true for dev/test environments
-  deletion_protection    = var.environment == "prod" ? true : false  # Protect prod from accidental deletion
+  multi_az            = var.multi_az
+  publicly_accessible = false                                    # Always false - RDS in private subnets
+  skip_final_snapshot = var.skip_final_snapshot                  # Only true for dev/test environments
+  deletion_protection = var.environment == "prod" ? true : false # Protect prod from accidental deletion
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
-  
+
   performance_insights_enabled = var.environment == "prod"
   monitoring_interval          = var.environment == "prod" ? 60 : 0
   monitoring_role_arn          = var.environment == "prod" ? aws_iam_role.rds_enhanced_monitoring[0].arn : null

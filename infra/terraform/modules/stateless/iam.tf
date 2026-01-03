@@ -53,10 +53,10 @@ resource "aws_iam_role_policy" "lambda_ingest" {
         Action = [
           "cloudwatch:PutMetricData"
         ]
-        Resource = "*"  # Wildcard with namespace condition - restricts to Fluxa/Ingest namespace only
+        Resource = "*" # Wildcard with namespace condition - restricts to Fluxa/Ingest namespace only
         Condition = {
           StringEquals = {
-            "cloudwatch:namespace" = "Fluxa/Ingest"  # Namespace restriction mitigates wildcard risk
+            "cloudwatch:namespace" = "Fluxa/Ingest" # Namespace restriction mitigates wildcard risk
           }
         }
       }
@@ -138,10 +138,10 @@ resource "aws_iam_role_policy" "lambda_processor" {
         Action = [
           "cloudwatch:PutMetricData"
         ]
-        Resource = "*"  # Wildcard with namespace condition - restricts to Fluxa/Processor namespace only
+        Resource = "*" # Wildcard with namespace condition - restricts to Fluxa/Processor namespace only
         Condition = {
           StringEquals = {
-            "cloudwatch:namespace" = "Fluxa/Processor"  # Namespace restriction mitigates wildcard risk
+            "cloudwatch:namespace" = "Fluxa/Processor" # Namespace restriction mitigates wildcard risk
           }
         }
       }
@@ -204,10 +204,10 @@ resource "aws_iam_role_policy" "lambda_query" {
         Action = [
           "cloudwatch:PutMetricData"
         ]
-        Resource = "*"  # Wildcard with namespace condition - restricts to Fluxa/Query namespace only
+        Resource = "*" # Wildcard with namespace condition - restricts to Fluxa/Query namespace only
         Condition = {
           StringEquals = {
-            "cloudwatch:namespace" = "Fluxa/Query"  # Namespace restriction mitigates wildcard risk
+            "cloudwatch:namespace" = "Fluxa/Query" # Namespace restriction mitigates wildcard risk
           }
         }
       }
