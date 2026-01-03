@@ -1,0 +1,10 @@
+aws_region = "us-east-1"
+db_username = "fluxa_admin"
+db_password = "CHANGE_ME_STRONG_PASSWORD"
+
+# Lambda zip paths (relative to terraform root)
+lambda_ingest_zip_path = "../../../../dist/ingest.zip"
+lambda_processor_zip_path = "../../../../dist/processor.zip"
+lambda_query_zip_path = "../../../../dist/query.zip"
+
+

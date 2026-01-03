@@ -1,0 +1,109 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          [ "Fluxa/Ingest", "ingest_latency_ms", { "stat": "p50", "label": "p50" } ],
+          [ "...", { "stat": "p95", "label": "p95" } ]
+        ],
+        "period": 300,
+        "stat": "p95",
+        "region": "us-east-1",
+        "title": "Ingest Latency (p50, p95)",
+        "yAxis": {
+          "left": {
+            "label": "Milliseconds",
+            "min": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          [ "Fluxa/Processor", "process_latency_ms", { "stat": "p50", "label": "p50" } ],
+          [ "...", { "stat": "p95", "label": "p95" } ]
+        ],
+        "period": 300,
+        "stat": "p95",
+        "region": "us-east-1",
+        "title": "Processor Latency (p50, p95)",
+        "yAxis": {
+          "left": {
+            "label": "Milliseconds",
+            "min": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          [ "Fluxa/Ingest", "ingest_success", { "stat": "Sum", "period": 60, "label": "Ingest Success (1m)" } ]
+        ],
+        "period": 60,
+        "stat": "Sum",
+        "region": "us-east-1",
+        "title": "Ingest Success Rate (per minute)",
+        "yAxis": {
+          "left": {
+            "label": "Count",
+            "min": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          [ "Fluxa/Processor", "processed_success", { "stat": "Sum", "period": 60, "label": "Processed Success (1m)" } ]
+        ],
+        "period": 60,
+        "stat": "Sum",
+        "region": "us-east-1",
+        "title": "Processor Success Rate (per minute)",
+        "yAxis": {
+          "left": {
+            "label": "Count",
+            "min": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", { "dimensions": { "QueueName": "fluxa-dlq-dev" }, "stat": "Average", "label": "DLQ Depth" } ]
+        ],
+        "period": 300,
+        "stat": "Average",
+        "region": "us-east-1",
+        "title": "Dead Letter Queue Depth",
+        "yAxis": {
+          "left": {
+            "label": "Messages",
+            "min": 0
+          }
+        },
+        "annotations": {
+          "horizontal": [
+            {
+              "label": "Alert Threshold",
+              "value": 1,
+              "fill": "above",
+              "visible": true,
+              "color": "#ff0000"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+
+
