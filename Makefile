@@ -30,9 +30,10 @@ build:
 	@echo "Building Lambda functions..."
 	@mkdir -p $(DIST_DIR)
 	@for dir in $(LAMBDA_DIRS); do \
+		name=$$(basename $$dir); \
 		echo "Building $$dir..."; \
-		cd $$dir && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -tags lambda.norpc -o bootstrap main.go && \
-		mv bootstrap ../../$(DIST_DIR)/$$(basename $$dir) && \
+		mkdir -p $(DIST_DIR)/$$name && \
+		cd $$dir && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -tags lambda.norpc -o ../../$(DIST_DIR)/$$name/bootstrap main.go && \
 		cd ../..; \
 	done
 	@echo "Build complete"
@@ -67,7 +68,7 @@ package: build
 	@for dir in $(LAMBDA_DIRS); do \
 		name=$$(basename $$dir); \
 		echo "Packaging $$name..."; \
-		cd $(DIST_DIR) && zip -r $$name.zip $$name > /dev/null && rm -rf $$name && cd ..; \
+		cd $(DIST_DIR)/$$name && zip -r ../$$name.zip bootstrap > /dev/null && cd ../.. && rm -rf $(DIST_DIR)/$$name; \
 	done
 	@echo "Packaging complete"
 
