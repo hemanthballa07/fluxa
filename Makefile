@@ -127,9 +127,12 @@ local-up:
 	@timeout 30 sh -c 'until docker exec fluxa-postgres-local pg_isready -U fluxa_user -d fluxa > /dev/null 2>&1; do sleep 1; done' || echo "PostgreSQL ready"
 	@echo "PostgreSQL is ready"
 
-local-test: local-up
+check-docker:
+	@docker info > /dev/null 2>&1 || (echo "⚠️  Docker not available. Run 'make test' for unit tests or start Docker for integration tests." && exit 1)
+
+local-test: check-docker local-up
 	@echo "Running local test harness..."
-	@cd local && go run main.go
+	@go run local/main.go
 
 local-down:
 	@echo "Stopping local PostgreSQL..."
