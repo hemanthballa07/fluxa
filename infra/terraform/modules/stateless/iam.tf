@@ -64,6 +64,13 @@ resource "aws_iam_role_policy" "lambda_ingest" {
   })
 }
 
+# Attach VPC access policy to ingest Lambda (required for ENI creation)
+resource "aws_iam_role_policy_attachment" "lambda_ingest_vpc" {
+  count      = var.vpc_id != "" ? 1 : 0
+  role       = aws_iam_role.lambda_ingest.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 # Processor Lambda IAM Role
 resource "aws_iam_role" "lambda_processor" {
   name = "${var.project_name}-processor-${var.environment}"
