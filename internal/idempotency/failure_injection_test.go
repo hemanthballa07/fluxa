@@ -75,6 +75,12 @@ func TestProcessorCrashMidTransaction(t *testing.T) {
 	// Simulate crash - no MarkSuccess called, status remains 'processing'
 
 	// Simulate retry after crash - should detect 'processing' status and allow retry
+	// Manually expire the lock to simulate time passing (otherwise logic thinks it's still running)
+	_, err = db.ExecContext(context.Background(), "UPDATE idempotency_keys SET last_seen_at = $1 WHERE event_id = $2", time.Now().Add(-5*time.Minute), eventID)
+	if err != nil {
+		t.Fatalf("Failed to expire lock: %v", err)
+	}
+
 	alreadyProcessed2, err := client.CheckAndMark(eventID)
 	if err != nil {
 		t.Fatalf("Retry CheckAndMark failed: %v", err)
@@ -216,6 +222,14 @@ func TestSQSRetryToDLQ(t *testing.T) {
 
 	// Simulate multiple retry attempts (maxReceiveCount = 3 in our config)
 	for attempt := 1; attempt <= 3; attempt++ {
+		// If this is a retry (attempt > 1), we need to simulate that the previous attempt timed out
+		if attempt > 1 {
+			_, err := db.ExecContext(context.Background(), "UPDATE idempotency_keys SET last_seen_at = $1 WHERE event_id = $2", time.Now().Add(-5*time.Minute), eventID)
+			if err != nil {
+				t.Fatalf("Failed to expire lock: %v", err)
+			}
+		}
+
 		alreadyProcessed, err := client.CheckAndMark(eventID)
 		if err != nil {
 			t.Fatalf("Attempt %d CheckAndMark failed: %v", attempt, err)
