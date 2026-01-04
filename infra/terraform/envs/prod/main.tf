@@ -24,17 +24,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# VPC Configuration (should be provided or created separately)
-# For production, use dedicated VPC with proper networking
-variable "vpc_id" {
-  description = "VPC ID for production deployment"
-  type        = string
-}
-
-variable "subnet_ids" {
-  description = "Subnet IDs for RDS and Lambda"
-  type        = list(string)
-}
 
 # Security Group for Lambda
 resource "aws_security_group" "lambda" {
