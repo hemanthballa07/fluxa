@@ -98,7 +98,7 @@ func (p *Processor) ProcessMessage(sqsMsg *models.SQSEventMessage) error {
 		return fmt.Errorf("database insert failed: %w", err)
 	}
 
-	p.Metrics.EmitMetric("db_latency_ms", float64(time.Since(dbStartTime).Milliseconds()), "Milliseconds", nil)
+	_ = p.Metrics.EmitMetric("db_latency_ms", float64(time.Since(dbStartTime).Milliseconds()), "Milliseconds", nil)
 
 	// 6. Mark Success
 	if err := p.Idempotency.MarkSuccess(sqsMsg.EventID); err != nil {
@@ -111,15 +111,15 @@ func (p *Processor) ProcessMessage(sqsMsg *models.SQSEventMessage) error {
 		"event_id":   sqsMsg.EventID,
 		"latency_ms": latencyMs,
 	})
-	p.Metrics.EmitMetric("processed_success", 1, "Count", nil)
-	p.Metrics.EmitMetric("process_latency_ms", float64(latencyMs), "Milliseconds", nil)
+	_ = p.Metrics.EmitMetric("processed_success", 1, "Count", nil)
+	_ = p.Metrics.EmitMetric("process_latency_ms", float64(latencyMs), "Milliseconds", nil)
 
 	return nil
 }
 
 func (p *Processor) failPermanent(eventID, reason string) error {
 	p.Logger.Error("Permanent failure: "+reason, nil)
-	p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": reason})
-	p.Idempotency.MarkFailed(eventID, reason)
+	_ = p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": reason})
+	_ = p.Idempotency.MarkFailed(eventID, reason)
 	return nil // Don't retry
 }

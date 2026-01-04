@@ -21,7 +21,6 @@ import (
 
 var (
 	cfg           *config.Config
-	logger        *logging.Logger
 	metricsClient *metrics.Metrics
 	queueClient   *queue.Client
 	s3Client      *storage.Client
@@ -71,7 +70,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	var event models.Event
 	if err := json.Unmarshal([]byte(request.Body), &event); err != nil {
 		logger.Error("Failed to parse request body", err, map[string]interface{}{"stage": "validate", "error_code": "parse_error"})
-		metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "parse_error"})
+		_ = metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "parse_error"})
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,
 			Body:       fmt.Sprintf(`{"error": "Invalid JSON: %v"}`, err),
@@ -90,7 +89,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// Validate event
 	if err := event.Validate(); err != nil {
 		logger.Error("Event validation failed", err, map[string]interface{}{"stage": "validate", "error_code": "validation_error"})
-		metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "validation_error"})
+		_ = metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "validation_error"})
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,
 			Body:       fmt.Sprintf(`{"error": "Validation failed: %v"}`, err),
@@ -102,7 +101,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	payloadBytes, err := event.ToJSON()
 	if err != nil {
 		logger.Error("Failed to serialize event", err, map[string]interface{}{"stage": "encrypt", "error_code": "serialization_error"})
-		metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "serialization_error"})
+		_ = metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "serialization_error"})
 		return events.APIGatewayProxyResponse{
 			StatusCode: 500,
 			Body:       `{"error": "Internal server error"}`,
@@ -128,7 +127,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		s3Key, err := s3Client.PutPayload(event.EventID, payloadBytes)
 		if err != nil {
 			logger.Error("Failed to store payload in S3", err, map[string]interface{}{"stage": "persist_s3", "error_code": "s3_error"})
-			metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "s3_error"})
+			_ = metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "s3_error"})
 			return events.APIGatewayProxyResponse{
 				StatusCode: 500,
 				Body:       `{"error": "Internal server error"}`,
@@ -141,7 +140,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		sqsMsg.S3Key = &s3Key
 
 		logger.Info("Stored payload in S3", map[string]interface{}{"stage": "persist_s3", "s3_key": s3Key})
-		metricsClient.EmitMetric("s3_puts", 1, "Count", nil)
+		_ = metricsClient.EmitMetric("s3_puts", 1, "Count", nil)
 	} else {
 		// Include inline
 		payloadStr := string(payloadBytes)
@@ -152,7 +151,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// Send to SQS
 	if err := queueClient.SendEventMessage(sqsMsg); err != nil {
 		logger.Error("Failed to send message to SQS", err, map[string]interface{}{"stage": "enqueue", "error_code": "sqs_error"})
-		metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "sqs_error"})
+		_ = metricsClient.EmitMetric("ingest_failure", 1, "Count", map[string]string{"error": "sqs_error"})
 		return events.APIGatewayProxyResponse{
 			StatusCode: 500,
 			Body:       `{"error": "Internal server error"}`,
@@ -170,15 +169,15 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	})
 
 	// Emit metrics
-	metricsClient.EmitMetric("ingest_success", 1, "Count", nil)
-	metricsClient.EmitMetric("sqs_sent", 1, "Count", nil)
-	metricsClient.EmitMetric("ingest_latency_ms", float64(latencyMs), "Milliseconds", nil)
+	_ = metricsClient.EmitMetric("ingest_success", 1, "Count", nil)
+	_ = metricsClient.EmitMetric("sqs_sent", 1, "Count", nil)
+	_ = metricsClient.EmitMetric("ingest_latency_ms", float64(latencyMs), "Milliseconds", nil)
 
 	// Emit payload mode counter
 	if sqsMsg.PayloadMode == models.PayloadModeInline {
-		metricsClient.EmitMetric("payload_inline_count", 1, "Count", nil)
+		_ = metricsClient.EmitMetric("payload_inline_count", 1, "Count", nil)
 	} else {
-		metricsClient.EmitMetric("payload_s3_count", 1, "Count", nil)
+		_ = metricsClient.EmitMetric("payload_s3_count", 1, "Count", nil)
 	}
 
 	response := map[string]interface{}{

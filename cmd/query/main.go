@@ -15,7 +15,6 @@ import (
 
 var (
 	cfg           *config.Config
-	logger        *logging.Logger
 	metricsClient *metrics.Metrics
 	dbClient      *db.Client
 )
@@ -98,7 +97,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	logger.Info("Successfully retrieved event", map[string]interface{}{"event_id": eventID})
-	metricsClient.EmitMetric("query_success", 1, "Count", nil)
+	_ = metricsClient.EmitMetric("query_success", 1, "Count", nil)
 
 	// Convert to response format
 	response := map[string]interface{}{
