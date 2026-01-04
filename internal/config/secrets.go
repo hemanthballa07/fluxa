@@ -68,5 +68,3 @@ func LoadDBPasswordFromSecret(secretARN string) (string, error) {
 	// Otherwise, treat as plain string
 	return secretValue, nil
 }
-
-

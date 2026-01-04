@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq"
 	"github.com/fluxa/fluxa/internal/models"
+	_ "github.com/lib/pq"
 )
 
 // Client wraps database operations
@@ -142,4 +142,3 @@ func (c *Client) GetEventByID(eventID string) (*models.EventRecord, error) {
 
 // ErrNotFound is returned when an event is not found
 var ErrNotFound = fmt.Errorf("event not found")
-

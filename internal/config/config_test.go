@@ -25,10 +25,10 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "valid config with secret ARN",
 			cfg: &Config{
-				SQSQueueURL:        "https://sqs.us-east-1.amazonaws.com/123456789/queue",
-				S3BucketName:       "test-bucket",
-				DBHost:             "localhost",
-				DBUser:             "user",
+				SQSQueueURL:         "https://sqs.us-east-1.amazonaws.com/123456789/queue",
+				S3BucketName:        "test-bucket",
+				DBHost:              "localhost",
+				DBUser:              "user",
 				DBPasswordSecretARN: "arn:aws:secretsmanager:us-east-1:123456789:secret:db-password",
 			},
 			wantErr: false,
@@ -56,30 +56,30 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "missing DB host",
 			cfg: &Config{
-				SQSQueueURL: "https://sqs.us-east-1.amazonaws.com/123456789/queue",
+				SQSQueueURL:  "https://sqs.us-east-1.amazonaws.com/123456789/queue",
 				S3BucketName: "test-bucket",
-				DBUser:      "user",
-				DBPassword:  "password",
+				DBUser:       "user",
+				DBPassword:   "password",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing DB user",
 			cfg: &Config{
-				SQSQueueURL: "https://sqs.us-east-1.amazonaws.com/123456789/queue",
+				SQSQueueURL:  "https://sqs.us-east-1.amazonaws.com/123456789/queue",
 				S3BucketName: "test-bucket",
-				DBHost:      "localhost",
-				DBPassword:  "password",
+				DBHost:       "localhost",
+				DBPassword:   "password",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing both password and secret ARN",
 			cfg: &Config{
-				SQSQueueURL: "https://sqs.us-east-1.amazonaws.com/123456789/queue",
+				SQSQueueURL:  "https://sqs.us-east-1.amazonaws.com/123456789/queue",
 				S3BucketName: "test-bucket",
-				DBHost:      "localhost",
-				DBUser:      "user",
+				DBHost:       "localhost",
+				DBUser:       "user",
 			},
 			wantErr: true,
 		},
@@ -149,5 +149,3 @@ func TestLoadFromEnv(t *testing.T) {
 		t.Errorf("LoadFromEnv() DBHost = %v, want localhost", cfg.DBHost)
 	}
 }
-
-

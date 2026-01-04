@@ -63,4 +63,3 @@ const (
 	IdempotencyStatusSuccess    IdempotencyStatus = "success"
 	IdempotencyStatusFailed     IdempotencyStatus = "failed"
 )
-

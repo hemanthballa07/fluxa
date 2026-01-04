@@ -10,9 +10,9 @@ import (
 
 func TestShouldUseS3(t *testing.T) {
 	tests := []struct {
-		name         string
-		payloadSize  int
-		wantUseS3    bool
+		name        string
+		payloadSize int
+		wantUseS3   bool
 	}{
 		{
 			name:        "small payload inline",
@@ -122,5 +122,3 @@ func TestParseSQSEventMessage(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
-
-

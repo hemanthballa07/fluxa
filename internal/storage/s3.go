@@ -12,7 +12,7 @@ import (
 
 // Client wraps S3 operations
 type Client struct {
-	s3Client  *s3.S3
+	s3Client   *s3.S3
 	bucketName string
 }
 
@@ -69,5 +69,3 @@ func (c *Client) GetPayload(key string) ([]byte, error) {
 
 	return buf.Bytes(), nil
 }
-
-
