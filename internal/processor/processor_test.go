@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -58,10 +60,9 @@ func TestProcessor_DuplicateMessage(t *testing.T) {
 		}(),
 	}
 
-	// Recalculate hash for validity
-	// echo -n '{"user_id":"u1","amount":10,"currency":"USD","merchant":"m1","timestamp":"2024-01-01T00:00:00Z"}' | shasum -a 256
-	// 5c5...
-	msg.PayloadSHA256 = "5c528373972a912bb0170a41620c5825310650f9078440076a591572076063b5"
+	// Calculate hash dynamically to avoid mismatches
+	hash := sha256.Sum256([]byte(*msg.PayloadInline))
+	msg.PayloadSHA256 = hex.EncodeToString(hash[:])
 
 	// 1. Process First Time
 	if err := proc.ProcessMessage(msg); err != nil {

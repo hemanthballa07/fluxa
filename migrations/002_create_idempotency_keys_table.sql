@@ -1,6 +1,6 @@
 -- Create idempotency_keys table
 CREATE TABLE IF NOT EXISTS idempotency_keys (
-    event_id VARCHAR(36) PRIMARY KEY,
+    event_id VARCHAR(255) PRIMARY KEY,
     status VARCHAR(20) NOT NULL CHECK (status IN ('processing', 'success', 'failed')),
     first_seen_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,

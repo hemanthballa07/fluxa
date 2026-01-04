@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fluxa/fluxa/internal/models"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
@@ -48,7 +49,7 @@ func TestCheckAndMark_NewEvent(t *testing.T) {
 	db := getTestDB(t)
 	client := NewClient(db)
 
-	eventID := "test-new-event-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	alreadyProcessed, err := client.CheckAndMark(eventID)
 	if err != nil {
@@ -79,7 +80,7 @@ func TestCheckAndMark_AlreadyProcessed(t *testing.T) {
 	db := getTestDB(t)
 	client := NewClient(db)
 
-	eventID := "test-already-processed-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// First, mark as processing and then success
 	alreadyProcessed1, err := client.CheckAndMark(eventID)
@@ -120,7 +121,7 @@ func TestCheckAndMark_RetryAfterFailure(t *testing.T) {
 	db := getTestDB(t)
 	client := NewClient(db)
 
-	eventID := "test-retry-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// First attempt - mark as processing
 	alreadyProcessed1, err := client.CheckAndMark(eventID)
@@ -165,7 +166,7 @@ func TestIdempotency_EndToEnd(t *testing.T) {
 	idempotencyClient := NewClient(db)
 
 	// This test simulates the full processor flow to prove idempotency
-	eventID := "test-e2e-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// Simulate first processing attempt
 	alreadyProcessed1, err := idempotencyClient.CheckAndMark(eventID)
@@ -206,7 +207,7 @@ func TestCheckAndMark_ConcurrentCalls_OnlyOneSucceeds(t *testing.T) {
 	db := getTestDB(t)
 	client := NewClient(db)
 
-	eventID := "test-concurrent-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 	concurrency := 50
 
 	// Channel to coordinate start of all goroutines
@@ -225,7 +226,7 @@ func TestCheckAndMark_ConcurrentCalls_OnlyOneSucceeds(t *testing.T) {
 				// But our logic handles locking, so we expect mostly success or alreadyProcessed
 				// We log error but don't fail test immediately to avoid race on t.Fail
 				t.Logf("CheckAndMark error: %v", err)
-				resultsCh <- true // Treat error as "didn't succeed in claiming"
+				resultsCh <- false // Treat error as "didn't succeed in claiming"
 				return
 			}
 

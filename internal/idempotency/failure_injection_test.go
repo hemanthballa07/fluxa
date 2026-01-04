@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fluxa/fluxa/internal/models"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
@@ -17,7 +18,7 @@ func TestDuplicateMessageDelivery(t *testing.T) {
 	db := getTestDBForFailureTests(t)
 	client := NewClient(db)
 
-	eventID := "test-duplicate-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// Simulate first message processing
 	alreadyProcessed1, err := client.CheckAndMark(eventID)
@@ -60,7 +61,7 @@ func TestProcessorCrashMidTransaction(t *testing.T) {
 	db := getTestDBForFailureTests(t)
 	client := NewClient(db)
 
-	eventID := "test-crash-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// Simulate first attempt - CheckAndMark sets status to 'processing'
 	alreadyProcessed1, err := client.CheckAndMark(eventID)
@@ -128,7 +129,7 @@ func TestInvalidPayloadSchema(t *testing.T) {
 	db := getTestDBForFailureTests(t)
 	client := NewClient(db)
 
-	eventID := "test-invalid-schema-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// Simulate CheckAndMark (payload would be validated before this in real flow)
 	alreadyProcessed, err := client.CheckAndMark(eventID)
@@ -175,7 +176,7 @@ func TestPayloadHashMismatch(t *testing.T) {
 	db := getTestDBForFailureTests(t)
 	client := NewClient(db)
 
-	eventID := "test-hash-mismatch-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// Simulate CheckAndMark
 	alreadyProcessed, err := client.CheckAndMark(eventID)
@@ -211,7 +212,7 @@ func TestSQSRetryToDLQ(t *testing.T) {
 	db := getTestDBForFailureTests(t)
 	client := NewClient(db)
 
-	eventID := "test-dlq-" + time.Now().Format("20060102150405")
+	eventID := "test-" + uuid.New().String()
 
 	// Simulate multiple retry attempts (maxReceiveCount = 3 in our config)
 	for attempt := 1; attempt <= 3; attempt++ {

@@ -1,7 +1,7 @@
 -- Create events table
 CREATE TABLE IF NOT EXISTS events (
-    event_id VARCHAR(36) PRIMARY KEY,
-    correlation_id VARCHAR(36) NOT NULL,
+    event_id VARCHAR(255) PRIMARY KEY,
+    correlation_id VARCHAR(255) NOT NULL,
     user_id VARCHAR(255) NOT NULL,
     amount DECIMAL(18, 2) NOT NULL,
     currency VARCHAR(3) NOT NULL,
