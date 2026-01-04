@@ -16,7 +16,7 @@ resource "aws_db_subnet_group" "main" {
 # Note: When security_group_id is provided, this is not created
 # The provided security group should allow ingress from Lambda security groups
 resource "aws_security_group" "rds" {
-  count       = var.security_group_id == "" ? 1 : 0
+  count       = var.create_security_group ? 1 : 0
   name        = "${var.project_name}-rds-${var.environment}"
   description = "Security group for RDS PostgreSQL"
   vpc_id      = var.vpc_id
@@ -70,7 +70,7 @@ resource "aws_secretsmanager_secret_version" "db_password" {
 resource "aws_db_instance" "main" {
   identifier            = "${var.project_name}-db-${var.environment}"
   engine                = "postgres"
-  engine_version        = "15.4"
+  engine_version        = "15.10"
   instance_class        = var.db_instance_class
   allocated_storage     = var.allocated_storage
   max_allocated_storage = var.max_allocated_storage
@@ -84,13 +84,13 @@ resource "aws_db_instance" "main" {
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [var.security_group_id != "" ? var.security_group_id : aws_security_group.rds[0].id]
+  publicly_accessible    = false # Reverted after migrations
 
   backup_retention_period = var.backup_retention_period
   backup_window           = "03:00-04:00"
   maintenance_window      = "mon:04:00-mon:05:00"
 
   multi_az            = var.multi_az
-  publicly_accessible = false                                    # Always false - RDS in private subnets
   skip_final_snapshot = var.skip_final_snapshot                  # Only true for dev/test environments
   deletion_protection = var.environment == "prod" ? true : false # Protect prod from accidental deletion
 

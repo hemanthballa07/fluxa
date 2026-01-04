@@ -73,9 +73,15 @@ variable "subnet_ids" {
 }
 
 variable "security_group_id" {
-  description = "Security group ID for RDS (will be created if not provided)"
+  description = "Security group ID for RDS (required when create_security_group is false)"
   type        = string
   default     = ""
+}
+
+variable "create_security_group" {
+  description = "Whether to create a security group for RDS (set false if providing security_group_id)"
+  type        = bool
+  default     = true
 }
 
 variable "skip_final_snapshot" {
