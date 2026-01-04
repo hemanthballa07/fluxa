@@ -68,7 +68,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	eventID := request.PathParameters["event_id"]
 	if eventID == "" {
 		logger.Warn("Missing event_id in path")
-		metricsClient.EmitMetric("query_failure", 1, "Count", map[string]string{"error": "missing_event_id"})
+		_ = metricsClient.EmitMetric("query_failure", 1, "Count", map[string]string{"error": "missing_event_id"})
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,
 			Body:       `{"error": "event_id is required"}`,
@@ -80,7 +80,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	record, err := dbClient.GetEventByID(eventID)
 	if err == db.ErrNotFound {
 		logger.Info("Event not found", map[string]interface{}{"event_id": eventID})
-		metricsClient.EmitMetric("query_not_found", 1, "Count", nil)
+		_ = metricsClient.EmitMetric("query_not_found", 1, "Count", nil)
 		return events.APIGatewayProxyResponse{
 			StatusCode: 404,
 			Body:       fmt.Sprintf(`{"error": "Event not found: %s"}`, eventID),
@@ -89,7 +89,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 	if err != nil {
 		logger.Error("Failed to query event", err)
-		metricsClient.EmitMetric("query_failure", 1, "Count", map[string]string{"error": "db_error"})
+		_ = metricsClient.EmitMetric("query_failure", 1, "Count", map[string]string{"error": "db_error"})
 		return events.APIGatewayProxyResponse{
 			StatusCode: 500,
 			Body:       `{"error": "Internal server error"}`,

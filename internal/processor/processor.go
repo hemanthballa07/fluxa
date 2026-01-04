@@ -36,7 +36,7 @@ func (p *Processor) ProcessMessage(sqsMsg *models.SQSEventMessage) error {
 	alreadyProcessed, err := p.Idempotency.CheckAndMark(sqsMsg.EventID)
 	if err != nil {
 		p.Logger.Error("Failed to check idempotency", err)
-		p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": "idempotency_error"})
+		_ = p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": "idempotency_error"})
 		return fmt.Errorf("idempotency check failed: %w", err)
 	}
 
@@ -63,7 +63,7 @@ func (p *Processor) ProcessMessage(sqsMsg *models.SQSEventMessage) error {
 		payloadBytes, err = p.S3.GetPayload(*sqsMsg.S3Key)
 		if err != nil {
 			p.Logger.Error("Failed to fetch payload from S3", err)
-			p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": "s3_fetch_error"})
+			_ = p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": "s3_fetch_error"})
 			return fmt.Errorf("s3 fetch failed: %w", err)
 		}
 
@@ -94,7 +94,7 @@ func (p *Processor) ProcessMessage(sqsMsg *models.SQSEventMessage) error {
 
 	if err := p.DB.InsertEvent(&event, sqsMsg.CorrelationID, sqsMsg.PayloadMode, s3Key); err != nil {
 		p.Logger.Error("Failed to insert event into database", err)
-		p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": "db_error"})
+		_ = p.Metrics.EmitMetric("processed_failure", 1, "Count", map[string]string{"error": "db_error"})
 		return fmt.Errorf("database insert failed: %w", err)
 	}
 

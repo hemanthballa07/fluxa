@@ -95,18 +95,18 @@ resource "aws_security_group" "rds" {
 module "stateful" {
   source = "../../modules/stateful"
 
-  environment         = "dev"
-  project_name        = "fluxa"
-  db_instance_class   = "db.t3.micro"
-  db_name             = "fluxa"
-  db_username         = var.db_username
-  db_password         = var.db_password
-  vpc_id              = data.aws_vpc.default.id
-  subnet_ids          = data.aws_subnets.default.ids
-  security_group_id      = aws_security_group.rds.id
-  create_security_group  = false
-  multi_az               = false
-  skip_final_snapshot    = true # For dev environment
+  environment           = "dev"
+  project_name          = "fluxa"
+  db_instance_class     = "db.t3.micro"
+  db_name               = "fluxa"
+  db_username           = var.db_username
+  db_password           = var.db_password
+  vpc_id                = data.aws_vpc.default.id
+  subnet_ids            = data.aws_subnets.default.ids
+  security_group_id     = aws_security_group.rds.id
+  create_security_group = false
+  multi_az              = false
+  skip_final_snapshot   = true # For dev environment
 
   tags = {
     Environment = "dev"

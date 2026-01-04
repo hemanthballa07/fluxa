@@ -16,15 +16,15 @@ resource "aws_lambda_function" "ingest" {
   environment {
     variables = {
       ENVIRONMENT    = var.environment
-      SQS_QUEUE_URL          = aws_sqs_queue.main.url
-      S3_BUCKET_NAME         = aws_s3_bucket.payloads.id
-      LOG_LEVEL              = "info"
-      DB_HOST                = var.db_host
-      DB_PORT                = "5432"
-      DB_NAME                = var.db_name
-      DB_USER                = var.db_user
-      DB_PASSWORD            = "unused" # Helper: Bypass config validation, no DB used
-      DB_SSL_MODE            = "require"
+      SQS_QUEUE_URL  = aws_sqs_queue.main.url
+      S3_BUCKET_NAME = aws_s3_bucket.payloads.id
+      LOG_LEVEL      = "info"
+      DB_HOST        = var.db_host
+      DB_PORT        = "5432"
+      DB_NAME        = var.db_name
+      DB_USER        = var.db_user
+      DB_PASSWORD    = "unused" # Helper: Bypass config validation, no DB used
+      DB_SSL_MODE    = "require"
     }
   }
 

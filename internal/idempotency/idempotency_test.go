@@ -31,10 +31,13 @@ func getTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("Failed to ping test database: %v", err)
 	}
 
-	// Clean up test data
 	cleanup := func() {
-		db.ExecContext(context.Background(), "DELETE FROM idempotency_keys WHERE event_id LIKE 'test-%'")
-		db.ExecContext(context.Background(), "DELETE FROM events WHERE event_id LIKE 'test-%'")
+		if _, err := db.ExecContext(context.Background(), "DELETE FROM idempotency_keys WHERE event_id LIKE 'test-%'"); err != nil {
+			t.Logf("cleanup failed: %v", err)
+		}
+		if _, err := db.ExecContext(context.Background(), "DELETE FROM events WHERE event_id LIKE 'test-%'"); err != nil {
+			t.Logf("cleanup failed: %v", err)
+		}
 	}
 	t.Cleanup(cleanup)
 

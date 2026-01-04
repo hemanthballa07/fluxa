@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
 	"github.com/fluxa/fluxa/internal/models"
+	_ "github.com/lib/pq"
 )
 
 // TestDuplicateMessageDelivery simulates duplicate SQS message delivery
@@ -101,7 +101,7 @@ func TestProcessorCrashMidTransaction(t *testing.T) {
 // Expected: Context timeout should cancel operation, error returned (allows retry)
 func TestDBTimeout(t *testing.T) {
 	db := getTestDBForFailureTests(t)
-	
+
 	// Create a context with very short timeout to simulate timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
 	defer cancel()
@@ -112,7 +112,7 @@ func TestDBTimeout(t *testing.T) {
 	// Attempt query with expired context
 	var result string
 	err := db.QueryRowContext(ctx, "SELECT 'test'").Scan(&result)
-	
+
 	// Should fail with context deadline exceeded
 	if err == nil {
 		t.Error("Expected context deadline exceeded error, got nil")
@@ -267,11 +267,14 @@ func getTestDBForFailureTests(t *testing.T) *sql.DB {
 	}
 
 	t.Cleanup(func() {
-		db.ExecContext(context.Background(), "DELETE FROM idempotency_keys WHERE event_id LIKE 'test-%'")
-		db.ExecContext(context.Background(), "DELETE FROM events WHERE event_id LIKE 'test-%'")
+		if _, err := db.ExecContext(context.Background(), "DELETE FROM idempotency_keys WHERE event_id LIKE 'test-%'"); err != nil {
+			t.Logf("cleanup failed: %v", err)
+		}
+		if _, err := db.ExecContext(context.Background(), "DELETE FROM events WHERE event_id LIKE 'test-%'"); err != nil {
+			t.Logf("cleanup failed: %v", err)
+		}
 		db.Close()
 	})
 
 	return db
 }
-

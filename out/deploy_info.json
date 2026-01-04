@@ -1,0 +1,22 @@
+{
+  "api_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "https://zrpx0mxv7i.execute-api.us-east-1.amazonaws.com//dev"
+  },
+  "db_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "fluxa-db-dev.cut4w0q6me6a.us-east-1.rds.amazonaws.com:5432"
+  },
+  "sns_topic_arn": {
+    "sensitive": false,
+    "type": "string",
+    "value": "arn:aws:sns:us-east-1:603588836841:fluxa-events-dev"
+  },
+  "sqs_queue_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "https://sqs.us-east-1.amazonaws.com/603588836841/fluxa-queue-dev"
+  }
+}

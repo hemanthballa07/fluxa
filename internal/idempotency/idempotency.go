@@ -29,7 +29,7 @@ func (c *Client) CheckAndMark(eventID string) (alreadyProcessed bool, err error)
 	if err != nil {
 		return false, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now().UTC()
 
@@ -37,7 +37,7 @@ func (c *Client) CheckAndMark(eventID string) (alreadyProcessed bool, err error)
 	var currentStatus sql.NullString
 	checkQuery := `SELECT status FROM idempotency_keys WHERE event_id = $1 FOR UPDATE`
 	err = tx.QueryRowContext(ctx, checkQuery, eventID).Scan(&currentStatus)
-	
+
 	if err == sql.ErrNoRows {
 		// New event - insert with 'processing' status
 		insertQuery := `
@@ -169,4 +169,3 @@ func (c *Client) GetStatus(eventID string) (*models.IdempotencyKeyRecord, error)
 
 	return &record, nil
 }
-
