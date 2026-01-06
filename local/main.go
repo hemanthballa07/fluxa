@@ -209,7 +209,9 @@ func runMigrations(db *sql.DB) error {
 		attempts int,
 		error_reason text,
 		created_at timestamp default current_timestamp,
-		updated_at timestamp default current_timestamp
+		updated_at timestamp default current_timestamp,
+		last_seen_at timestamp,
+		first_seen_at timestamp
 	);
 	create table if not exists events (
 		event_id varchar(255) primary key,
@@ -220,7 +222,9 @@ func runMigrations(db *sql.DB) error {
 		amount decimal,
 		currency varchar(10),
 		merchant varchar(255),
-		timestamp timestamp
+		ts timestamp,
+		metadata_json text,
+		created_at timestamp default current_timestamp
 	);
 	`
 	_, err := db.Exec(query)
