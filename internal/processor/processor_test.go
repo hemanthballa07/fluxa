@@ -130,7 +130,7 @@ func TestProcessor_HashMismatch_NoRetry(t *testing.T) {
 	if status.Status != string(models.IdempotencyStatusFailed) {
 		t.Errorf("Expected status 'failed', got '%s'", status.Status)
 	}
-	if status.ErrorReason == nil || *status.ErrorReason != "hash_mismatch" {
-		t.Errorf("Expected error reason 'hash_mismatch', got %v", status.ErrorReason)
+	if status.ErrorReason == nil || *status.ErrorReason != "non-retryable: hash_mismatch" {
+		t.Errorf("Expected error reason 'non-retryable: hash_mismatch', got %v", status.ErrorReason)
 	}
 }
