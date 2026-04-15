@@ -1,0 +1,138 @@
+{
+  "title": "Fluxa Overview",
+  "uid": "fluxa-overview",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Events Ingested Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(events_ingested_total[1m])",
+          "legendFormat": "ingested/s",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Events Processed Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(events_processed_total{status=\"success\"}[1m])",
+          "legendFormat": "processed/s",
+          "datasource": "Prometheus"
+        },
+        {
+          "expr": "rate(events_processed_total{status=\"failure\"}[1m])",
+          "legendFormat": "failures/s",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "P99 Process Latency (s)",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(process_latency_seconds_bucket[5m]))",
+          "legendFormat": "p99",
+          "datasource": "Prometheus"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "title": "Fraud Rate (% of processed events)",
+      "type": "gauge",
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(fraud_flags_total[5m]) / rate(events_processed_total[5m]) * 100",
+          "legendFormat": "fraud %",
+          "datasource": "Prometheus"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "minValue": 0,
+        "maxValue": 100
+      }
+    },
+    {
+      "id": 5,
+      "title": "Fraud Flags by Rule (last 5 min)",
+      "type": "barchart",
+      "gridPos": { "x": 8, "y": 8, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (rule) (increase(fraud_flags_total[5m]))",
+          "legendFormat": "{{rule}}",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Fraud Flags Over Time (by rule)",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (rule) (rate(fraud_flags_total[1m]))",
+          "legendFormat": "{{rule}}",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Top Flagged Merchants (last hour)",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": "PostgreSQL",
+      "targets": [
+        {
+          "rawSql": "SELECT e.merchant, COUNT(*) AS flags FROM events e JOIN fraud_flags f ON e.event_id = f.event_id WHERE f.flagged_at > NOW() - INTERVAL '1 hour' GROUP BY e.merchant ORDER BY flags DESC LIMIT 10",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Transaction Volume (5-min buckets)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": "PostgreSQL",
+      "targets": [
+        {
+          "rawSql": "SELECT date_trunc('minute', ts) AS time, COUNT(*) AS tx_count FROM events WHERE ts > NOW() - INTERVAL '1 hour' GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Active Fraud Flags by Rule (last hour)",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "datasource": "PostgreSQL",
+      "targets": [
+        {
+          "rawSql": "SELECT rule_name, COUNT(*) AS count FROM fraud_flags WHERE flagged_at > NOW() - INTERVAL '1 hour' GROUP BY rule_name ORDER BY count DESC",
+          "format": "table"
+        }
+      ]
+    }
+  ]
+}

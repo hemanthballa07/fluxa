@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fluxa/fluxa/internal/models"
+	"github.com/fluxa/fluxa/internal/domain"
 	_ "github.com/lib/pq"
 )
 
@@ -47,7 +47,7 @@ func (c *Client) GetDB() *sql.DB {
 
 // InsertEvent inserts an event into the events table
 // Uses ON CONFLICT DO NOTHING to handle duplicate event_id gracefully (idempotency)
-func (c *Client) InsertEvent(event *models.Event, correlationID string, payloadMode models.PayloadMode, s3Key *string) error {
+func (c *Client) InsertEvent(event *domain.Event, correlationID string, payloadMode domain.PayloadMode, s3Key *string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -91,19 +91,19 @@ func (c *Client) InsertEvent(event *models.Event, correlationID string, payloadM
 }
 
 // GetEventByID retrieves an event by event_id
-func (c *Client) GetEventByID(eventID string) (*models.EventRecord, error) {
+func (c *Client) GetEventByID(eventID string) (*domain.EventRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	query := `
-		SELECT 
-			event_id, correlation_id, user_id, amount, currency, merchant, 
+		SELECT
+			event_id, correlation_id, user_id, amount, currency, merchant,
 			ts, metadata_json, payload_mode, s3_key, created_at
 		FROM events
 		WHERE event_id = $1
 	`
 
-	var record models.EventRecord
+	var record domain.EventRecord
 	var metadataJSON sql.NullString
 	var s3Key sql.NullString
 
@@ -142,3 +142,50 @@ func (c *Client) GetEventByID(eventID string) (*models.EventRecord, error) {
 
 // ErrNotFound is returned when an event is not found
 var ErrNotFound = fmt.Errorf("event not found")
+
+// InsertFraudFlag inserts a fraud flag into the fraud_flags table.
+// Uses ON CONFLICT DO NOTHING so repeated calls with the same flag_id are safe.
+func (c *Client) InsertFraudFlag(flag *domain.FraudFlag) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `
+		INSERT INTO fraud_flags (flag_id, event_id, user_id, rule_name, rule_value, flagged_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (flag_id) DO NOTHING
+	`
+
+	_, err := c.db.ExecContext(ctx, query,
+		flag.FlagID,
+		flag.EventID,
+		flag.UserID,
+		flag.RuleName,
+		flag.RuleValue,
+		flag.FlaggedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert fraud flag: %w", err)
+	}
+	return nil
+}
+
+// CountRecentEvents returns the number of events for a user within the last windowSeconds seconds.
+// Used by the fraud engine for velocity checks.
+func (c *Client) CountRecentEvents(userID string, windowSeconds int) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `
+		SELECT COUNT(*)
+		FROM events
+		WHERE user_id = $1
+		  AND ts >= NOW() - ($2 * INTERVAL '1 second')
+	`
+
+	var count int
+	err := c.db.QueryRowContext(ctx, query, userID, windowSeconds).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count recent events: %w", err)
+	}
+	return count, nil
+}

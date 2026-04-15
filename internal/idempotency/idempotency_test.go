@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxa/fluxa/internal/models"
+	"github.com/fluxa/fluxa/internal/domain"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
@@ -68,7 +68,7 @@ func TestCheckAndMark_NewEvent(t *testing.T) {
 	if status == nil {
 		t.Fatal("Expected status record to exist")
 	}
-	if status.Status != string(models.IdempotencyStatusProcessing) {
+	if status.Status != string(domain.IdempotencyStatusProcessing) {
 		t.Errorf("Expected status 'processing', got '%s'", status.Status)
 	}
 	if status.Attempts != 1 {
@@ -112,7 +112,7 @@ func TestCheckAndMark_AlreadyProcessed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatus failed: %v", err)
 	}
-	if status.Status != string(models.IdempotencyStatusSuccess) {
+	if status.Status != string(domain.IdempotencyStatusSuccess) {
 		t.Errorf("Expected status to remain 'success', got '%s'", status.Status)
 	}
 }
@@ -156,7 +156,7 @@ func TestCheckAndMark_RetryAfterFailure(t *testing.T) {
 	if status.Attempts < 2 {
 		t.Errorf("Expected attempts to be at least 2, got %d", status.Attempts)
 	}
-	if status.Status != string(models.IdempotencyStatusProcessing) {
+	if status.Status != string(domain.IdempotencyStatusProcessing) {
 		t.Errorf("Expected status to be 'processing' after retry, got '%s'", status.Status)
 	}
 }
@@ -198,7 +198,7 @@ func TestIdempotency_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatus failed: %v", err)
 	}
-	if status.Status != string(models.IdempotencyStatusSuccess) {
+	if status.Status != string(domain.IdempotencyStatusSuccess) {
 		t.Errorf("Expected final status to be 'success', got '%s'", status.Status)
 	}
 }

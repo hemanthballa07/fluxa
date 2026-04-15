@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxa/fluxa/internal/models"
+	"github.com/fluxa/fluxa/internal/domain"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
@@ -50,7 +50,7 @@ func TestDuplicateMessageDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatus failed: %v", err)
 	}
-	if status.Status != string(models.IdempotencyStatusSuccess) {
+	if status.Status != string(domain.IdempotencyStatusSuccess) {
 		t.Errorf("Expected status to remain 'success', got '%s'", status.Status)
 	}
 }
@@ -99,7 +99,7 @@ func TestProcessorCrashMidTransaction(t *testing.T) {
 	if status.Attempts < 2 {
 		t.Errorf("Expected attempts to be at least 2, got %d", status.Attempts)
 	}
-	if status.Status != string(models.IdempotencyStatusProcessing) {
+	if status.Status != string(domain.IdempotencyStatusProcessing) {
 		t.Errorf("Expected status to be 'processing', got '%s'", status.Status)
 	}
 }
@@ -157,7 +157,7 @@ func TestInvalidPayloadSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatus failed: %v", err)
 	}
-	if status.Status != string(models.IdempotencyStatusFailed) {
+	if status.Status != string(domain.IdempotencyStatusFailed) {
 		t.Errorf("Expected status 'failed', got '%s'", status.Status)
 	}
 	if status.ErrorReason == nil || *status.ErrorReason == "" {
@@ -204,7 +204,7 @@ func TestPayloadHashMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatus failed: %v", err)
 	}
-	if status.Status != string(models.IdempotencyStatusFailed) {
+	if status.Status != string(domain.IdempotencyStatusFailed) {
 		t.Errorf("Expected status 'failed', got '%s'", status.Status)
 	}
 	if status.ErrorReason == nil || *status.ErrorReason != "hash_mismatch" {
@@ -256,7 +256,7 @@ func TestSQSRetryToDLQ(t *testing.T) {
 	if status.Attempts < 3 {
 		t.Errorf("Expected at least 3 attempts, got %d", status.Attempts)
 	}
-	if status.Status != string(models.IdempotencyStatusFailed) {
+	if status.Status != string(domain.IdempotencyStatusFailed) {
 		t.Errorf("Expected status 'failed', got '%s'", status.Status)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fluxa/fluxa/internal/models"
+	"github.com/fluxa/fluxa/internal/domain"
 )
 
 // Client handles idempotency checks
@@ -47,7 +47,7 @@ func (c *Client) CheckAndMark(eventID string) (alreadyProcessed bool, err error)
 				INSERT INTO idempotency_keys (event_id, status, first_seen_at, last_seen_at, attempts)
 				VALUES ($1, $2, $3, $4, 1)
 			`
-			_, err = tx.ExecContext(ctx, insertQuery, eventID, string(models.IdempotencyStatusProcessing), now, now)
+			_, err = tx.ExecContext(ctx, insertQuery, eventID, string(domain.IdempotencyStatusProcessing), now, now)
 			if err != nil {
 				// If duplicate key error (race condition), continue loop to find the record
 				// pq error code 23505 is unique_violation, but checking string is safer cross-driver/mock
@@ -62,7 +62,7 @@ func (c *Client) CheckAndMark(eventID string) (alreadyProcessed bool, err error)
 		}
 
 		// 3. Record exists - check state
-		if currentStatus.Valid && currentStatus.String == string(models.IdempotencyStatusSuccess) {
+		if currentStatus.Valid && currentStatus.String == string(domain.IdempotencyStatusSuccess) {
 			// Already processed successfully
 			if err = tx.Commit(); err != nil {
 				return false, fmt.Errorf("failed to commit transaction: %w", err)
@@ -70,7 +70,7 @@ func (c *Client) CheckAndMark(eventID string) (alreadyProcessed bool, err error)
 			return true, nil
 		}
 
-		if currentStatus.Valid && currentStatus.String == string(models.IdempotencyStatusProcessing) {
+		if currentStatus.Valid && currentStatus.String == string(domain.IdempotencyStatusProcessing) {
 			// If currently processing and "active" (seen recently), consider it locked/deduplicated.
 			// This prevents concurrent execution race where B thinks it's a retry while A is still working.
 			// Assumption: A process won't take longer than 1 minute without updating status/heartbeat.
@@ -89,7 +89,7 @@ func (c *Client) CheckAndMark(eventID string) (alreadyProcessed bool, err error)
 			SET status = $1, last_seen_at = $2, attempts = attempts + 1
 			WHERE event_id = $3
 		`
-		_, err = tx.ExecContext(ctx, updateQuery, string(models.IdempotencyStatusProcessing), now, eventID)
+		_, err = tx.ExecContext(ctx, updateQuery, string(domain.IdempotencyStatusProcessing), now, eventID)
 		if err != nil {
 			return false, fmt.Errorf("failed to update idempotency key: %w", err)
 		}
@@ -112,7 +112,7 @@ func (c *Client) MarkSuccess(eventID string) error {
 		WHERE event_id = $3
 	`
 
-	_, err := c.db.ExecContext(ctx, query, string(models.IdempotencyStatusSuccess), time.Now().UTC(), eventID)
+	_, err := c.db.ExecContext(ctx, query, string(domain.IdempotencyStatusSuccess), time.Now().UTC(), eventID)
 	if err != nil {
 		return fmt.Errorf("failed to mark success: %w", err)
 	}
@@ -136,7 +136,7 @@ func (c *Client) MarkFailed(eventID string, errorReason string) error {
 		WHERE event_id = $4
 	`
 
-	_, err := c.db.ExecContext(ctx, query, string(models.IdempotencyStatusFailed), time.Now().UTC(), errorReason, eventID)
+	_, err := c.db.ExecContext(ctx, query, string(domain.IdempotencyStatusFailed), time.Now().UTC(), errorReason, eventID)
 	if err != nil {
 		return fmt.Errorf("failed to mark failed: %w", err)
 	}
@@ -145,7 +145,7 @@ func (c *Client) MarkFailed(eventID string, errorReason string) error {
 }
 
 // GetStatus retrieves the idempotency status for an event
-func (c *Client) GetStatus(eventID string) (*models.IdempotencyKeyRecord, error) {
+func (c *Client) GetStatus(eventID string) (*domain.IdempotencyKeyRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -155,7 +155,7 @@ func (c *Client) GetStatus(eventID string) (*models.IdempotencyKeyRecord, error)
 		WHERE event_id = $1
 	`
 
-	var record models.IdempotencyKeyRecord
+	var record domain.IdempotencyKeyRecord
 	var errorReason sql.NullString
 
 	err := c.db.QueryRowContext(ctx, query, eventID).Scan(

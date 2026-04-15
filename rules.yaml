@@ -1,0 +1,21 @@
+# Fluxa Fraud Detection Rules
+# Modify these values and restart the processor container — no rebuild needed.
+
+# Flag transactions where amount exceeds this threshold (in USD)
+amount_threshold: 10000.00
+
+# Velocity check: flag if a user submits more than velocity_max_count
+# transactions within velocity_window_seconds seconds
+velocity_window_seconds: 300
+velocity_max_count: 10
+
+# Exact-match merchant names to flag immediately
+blocked_merchants:
+  - "FraudMerchant1"
+  - "SUSPICIOUS_VENDOR"
+
+# Currency codes considered high-risk
+high_risk_currencies:
+  - "XMR"
+  - "ZEC"
+  - "DASH"

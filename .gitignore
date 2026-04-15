@@ -48,3 +48,6 @@ bootstrap
 /ingest
 /processor
 /query
+
+# Dataset (Kaggle CSV — do not commit)
+data/

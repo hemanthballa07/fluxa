@@ -1,146 +1,78 @@
-.PHONY: help build test lint clean package terraform-fmt terraform-validate deploy-dev deploy-prod local-up local-test local-down
-
-# Variables
-GO := go
-GOFMT := gofmt
-GOLINT := golangci-lint
-TERRAFORM := terraform
-DIST_DIR := dist
-LAMBDA_DIRS := cmd/ingest cmd/processor cmd/query
+.PHONY: help up down build logs test lint clean replay ps
 
 # Default target
 help:
+	@echo "Fluxa — Local Fraud Detection Platform"
+	@echo ""
 	@echo "Available targets:"
-	@echo "  build            - Build all Lambda functions"
-	@echo "  test             - Run all tests"
-	@echo "  lint             - Run linters (golangci-lint)"
-	@echo "  clean            - Remove build artifacts"
-	@echo "  package          - Package Lambda functions as ZIP files"
-	@echo "  terraform-fmt    - Format Terraform files"
-	@echo "  terraform-validate - Validate Terraform configuration"
-	@echo "  deploy-dev       - Deploy to dev environment"
-	@echo "  deploy-prod      - Deploy to prod environment"
-	@echo "  verify-dev       - Verify dev deployment end-to-end (requires terraform apply + migrations)"
-	@echo "  local-up         - Start local PostgreSQL with docker-compose"
-	@echo "  local-test       - Run local test harness (requires local-up)"
-	@echo "  local-down       - Stop local PostgreSQL"
+	@echo "  up        - Build and start all services (except replay)"
+	@echo "  down      - Stop and remove all containers"
+	@echo "  build     - Build all service Docker images"
+	@echo "  logs      - Follow logs for all running services"
+	@echo "  ps        - Show status of all containers"
+	@echo "  replay    - Start the dataset replay service (requires ./data/transactions.csv)"
+	@echo "  test      - Run all Go tests"
+	@echo "  lint      - Run golangci-lint"
+	@echo "  clean     - Remove build artifacts and stop containers"
+	@echo ""
+	@echo "Quick start:"
+	@echo "  1. cp ~/Downloads/transactions.csv ./data/"
+	@echo "  2. make up"
+	@echo "  3. make replay"
+	@echo "  4. open http://localhost:3000  (Grafana, admin/admin)"
 
-# Build Lambda functions
+# Start full stack (infrastructure + services, not replay)
+up:
+	@mkdir -p data
+	docker compose up -d --build
+	@echo ""
+	@echo "Services ready:"
+	@echo "  Ingest:    http://localhost:8080"
+	@echo "  Query:     http://localhost:8083"
+	@echo "  RabbitMQ:  http://localhost:15672  (fluxa/fluxa_pass)"
+	@echo "  MinIO:     http://localhost:9001   (minioadmin/minioadmin123)"
+	@echo "  Prometheus:http://localhost:9090"
+	@echo "  Grafana:   http://localhost:3000   (admin/admin)"
+
+# Stop all containers
+down:
+	docker compose --profile replay down
+
+# Build images without starting
 build:
-	@echo "Building Lambda functions..."
-	@mkdir -p $(DIST_DIR)
-	@for dir in $(LAMBDA_DIRS); do \
-		name=$$(basename $$dir); \
-		echo "Building $$dir..."; \
-		mkdir -p $(DIST_DIR)/$$name && \
-		cd $$dir && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -tags lambda.norpc -o ../../$(DIST_DIR)/$$name/bootstrap main.go && \
-		cd ../..; \
-	done
-	@echo "Build complete"
+	docker compose build --parallel
 
-# Run tests
-test:
-	@echo "Running tests..."
-	$(GO) test -v -race -coverprofile=coverage.out ./...
-	$(GO) tool cover -html=coverage.out -o coverage.html
-	@echo "Test coverage report: coverage.html"
+# Follow logs
+logs:
+	docker compose logs -f
 
-# Lint code
-lint:
-	@echo "Running linters..."
-	@if ! command -v $(GOLINT) > /dev/null; then \
-		echo "golangci-lint not found. Installing..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
+# Show container status
+ps:
+	docker compose ps
+
+# Start replay service (CSV must be at ./data/transactions.csv)
+replay:
+	@if [ ! -f data/transactions.csv ]; then \
+		echo "ERROR: ./data/transactions.csv not found."; \
+		echo "Download PaySim from https://www.kaggle.com/datasets/ealaxi/paysim1"; \
+		exit 1; \
 	fi
-	$(GOLINT) run ./...
+	docker compose --profile replay up -d replay
+	docker compose logs -f replay
 
-# Clean build artifacts
+# Run Go tests (requires local PostgreSQL via 'make up')
+test:
+	go test -v -race ./...
+
+# Run linter
+lint:
+	@if ! command -v golangci-lint > /dev/null; then \
+		echo "golangci-lint not found. Install via: brew install golangci-lint"; \
+		exit 1; \
+	fi
+	golangci-lint run ./...
+
+# Clean up
 clean:
-	@echo "Cleaning..."
-	rm -rf $(DIST_DIR)
+	docker compose --profile replay down -v
 	rm -f coverage.out coverage.html
-	find . -name "*.zip" -type f -delete
-	@echo "Clean complete"
-
-# Package Lambda functions as ZIP files
-package: build
-	@echo "Packaging Lambda functions..."
-	@for dir in $(LAMBDA_DIRS); do \
-		name=$$(basename $$dir); \
-		echo "Packaging $$name..."; \
-		cd $(DIST_DIR)/$$name && zip -r ../$$name.zip bootstrap > /dev/null && cd ../.. && rm -rf $(DIST_DIR)/$$name; \
-	done
-	@echo "Packaging complete"
-
-# Format Terraform files
-terraform-fmt:
-	@echo "Formatting Terraform files..."
-	$(TERRAFORM) fmt -recursive infra/terraform/
-	@echo "Formatting complete"
-
-# Validate Terraform configuration
-terraform-validate:
-	@echo "Validating Terraform configuration..."
-	@for env in dev prod; do \
-		echo "Validating $$env environment..."; \
-		cd infra/terraform/envs/$$env && \
-		$(TERRAFORM) init -backend=false > /dev/null && \
-		$(TERRAFORM) validate && \
-		cd ../../..; \
-	done
-	@echo "Validation complete"
-
-# Deploy to dev environment
-deploy-dev:
-	@echo "Deploying to dev environment..."
-	@echo "1. Building and packaging..."
-	$(MAKE) package
-	@echo "2. Initializing Terraform..."
-	cd infra/terraform/envs/dev && $(TERRAFORM) init
-	@echo "3. Planning deployment..."
-	cd infra/terraform/envs/dev && $(TERRAFORM) plan
-	@echo "4. Apply when ready: cd infra/terraform/envs/dev && terraform apply"
-
-# Deploy to prod environment
-deploy-prod:
-	@echo "Deploying to prod environment..."
-	@echo "1. Building and packaging..."
-	$(MAKE) package
-	@echo "2. Initializing Terraform..."
-	cd infra/terraform/envs/prod && $(TERRAFORM) init
-	@echo "3. Planning deployment..."
-	cd infra/terraform/envs/prod && $(TERRAFORM) plan
-	@echo "4. Apply when ready: cd infra/terraform/envs/prod && terraform apply"
-
-# Install dependencies
-deps:
-	$(GO) mod download
-	$(GO) mod tidy
-
-# Run all checks (for CI)
-ci: deps lint test terraform-fmt terraform-validate
-
-# Local development targets
-local-up:
-	@echo "Starting local PostgreSQL..."
-	cd local && docker-compose up -d
-	@echo "Waiting for PostgreSQL to be ready..."
-	@timeout 30 sh -c 'until docker exec fluxa-postgres-local pg_isready -U fluxa_user -d fluxa > /dev/null 2>&1; do sleep 1; done' || echo "PostgreSQL ready"
-	@echo "PostgreSQL is ready"
-
-check-docker:
-	@docker info > /dev/null 2>&1 || (echo "⚠️  Docker not available. Run 'make test' for unit tests or start Docker for integration tests." && exit 1)
-
-local-test: check-docker local-up
-	@echo "Running local test harness..."
-	@go run local/main.go
-
-local-down:
-	@echo "Stopping local PostgreSQL..."
-	cd local && docker-compose down
-
-# Verify dev deployment
-verify-dev:
-	@echo "Verifying dev deployment..."
-	./scripts/verify_dev.sh
-
