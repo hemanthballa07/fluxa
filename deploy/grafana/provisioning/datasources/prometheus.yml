@@ -3,7 +3,23 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    uid: PBFA97CFB590B2093
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    editable: false
+
+  - name: PostgreSQL
+    type: postgres
+    uid: fluxa-postgres
+    access: proxy
+    url: postgres:5432
+    database: fluxa
+    user: fluxa_user
+    secureJsonData:
+      password: fluxa_password
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
     editable: false
