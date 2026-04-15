@@ -48,6 +48,8 @@ bootstrap
 /ingest
 /processor
 /query
+/replay
+out/
 
 # Dataset (Kaggle CSV — do not commit)
 data/

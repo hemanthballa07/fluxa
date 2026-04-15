@@ -1,264 +1,152 @@
 # Fluxa Security
 
-This document describes the security measures implemented in Fluxa.
+This document describes the security model for Fluxa's local Docker Compose platform.
 
-## Secrets Management
+---
 
-### Database Password
+## Overview
 
-- **Storage**: AWS Secrets Manager
-- **Access**: Lambda functions retrieve password via `GetSecretValue` API call
-- **Environment Variable**: `DB_PASSWORD_SECRET_ARN` contains only the secret ARN, not the password
-- **Code Location**: `internal/config/secrets.go`
+Fluxa is a **local-only fraud detection platform** designed to run on a developer's machine via Docker Compose. It is not intended for production deployment without the hardening steps described in the [Production Hardening](#production-hardening) section below.
 
-**Security Guarantee**: Database password is never stored in environment variables or logs.
+---
 
-### Secrets in Logs
+## Local Development Credentials
 
-**Invariant**: Secrets are never logged.
+All services use fixed default credentials suitable for local development only. These are intentionally simple — the platform has no external network exposure.
 
-**Verification**:
-- Code review confirms no secrets in log statements
-- Error messages do not include sensitive data
-- Only correlation IDs, event IDs, and non-sensitive metadata are logged
+| Service | Credential | Value | Where set |
+|---------|-----------|-------|-----------|
+| PostgreSQL | User / Password | `fluxa_user` / `fluxa_password` | `docker-compose.yml`, service env vars |
+| RabbitMQ | User / Password | `fluxa` / `fluxa_pass` | `docker-compose.yml`, service env vars |
+| MinIO | Access Key / Secret | `minioadmin` / `minioadmin123` | `docker-compose.yml`, service env vars |
+| Grafana | Admin password | `admin` | `docker-compose.yml` |
+| PostgreSQL (Grafana datasource) | Password | `fluxa_password` | `deploy/grafana/provisioning/datasources/prometheus.yml` |
 
-**Code Locations**:
-- Logging: `internal/logging/logger.go`
-- Error handling: All error messages reviewed for sensitive data
+**Why this is acceptable for local use:**
+- All ports are bound to `localhost` only — nothing is exposed to external networks
+- The platform is explicitly scoped to single-developer machines (no shared infra)
+- Credentials are consistent across services intentionally so the stack works with `make up` and nothing else
+- No real user data or production data is processed
 
-## Environment Variables
+**What is NOT acceptable:**
+- Do not deploy this stack to any networked server with these credentials
+- Do not use these credentials as a template for production configs
+- Do not commit a `.env` file with production secrets (`.env` is gitignored)
 
-Lambda functions use minimal environment variables:
+---
 
-### Ingest Lambda
-- `ENVIRONMENT` - Environment name (dev/prod)
-- `SQS_QUEUE_URL` - Queue URL (non-sensitive)
-- `S3_BUCKET_NAME` - Bucket name (non-sensitive)
-- `LOG_LEVEL` - Logging level
+## What's Protected
 
-### Processor Lambda
-- `ENVIRONMENT` - Environment name
-- `SQS_QUEUE_URL` - Queue URL
-- `SQS_DLQ_URL` - DLQ URL
-- `S3_BUCKET_NAME` - Bucket name
-- `DB_HOST` - Database hostname
-- `DB_PORT` - Database port (5432)
-- `DB_NAME` - Database name
-- `DB_USER` - Database username
-- `DB_PASSWORD_SECRET_ARN` - Secret ARN (not password itself)
-- `DB_SSL_MODE` - SSL mode (require)
-- `SNS_TOPIC_ARN` - SNS topic ARN
-- `LOG_LEVEL` - Logging level
+### SQL Injection
+All database queries use parameterized statements — no string concatenation in SQL.
 
-### Query Lambda
-- `ENVIRONMENT` - Environment name
-- `DB_HOST` - Database hostname
-- `DB_PORT` - Database port
-- `DB_NAME` - Database name
-- `DB_USER` - Database username
-- `DB_PASSWORD_SECRET_ARN` - Secret ARN (not password itself)
-- `DB_SSL_MODE` - SSL mode (require)
-- `LOG_LEVEL` - Logging level
-
-**Security**: No sensitive credentials in environment variables.
-
-## SQL Injection Prevention
-
-All SQL queries use parameterized statements (prepared statements).
-
-### Examples
-
-**Events Table Insert**:
-```sql
-INSERT INTO events (event_id, correlation_id, user_id, ...) 
-VALUES ($1, $2, $3, ...)
+```go
+// internal/db/db.go — parameterized throughout
+db.QueryRowContext(ctx, "SELECT ... WHERE user_id = $1", userID)
 ```
-Parameters are bound, never concatenated.
-
-**Idempotency Check**:
-```sql
-SELECT status FROM idempotency_keys WHERE event_id = $1 FOR UPDATE
-```
-
-**Code Locations**:
-- `internal/db/db.go` - All queries use `ExecContext` or `QueryRowContext` with parameters
-- `internal/idempotency/idempotency.go` - All queries parameterized
-
-**Security Guarantee**: SQL injection is not possible due to parameterized queries.
-
-## Request Size Limits
-
-### API Gateway
-
-- **Default Limit**: 10MB payload size
-- **Enforcement**: API Gateway automatically rejects requests >10MB
-
-**Note**: For Fluxa, typical event payloads are <10KB. 10MB limit is more than sufficient.
-
-### SQS Message Size
-
-- **Limit**: 256KB per message
-- **Enforcement**: 
-  - Payloads ≤256KB: Inlined in SQS message
-  - Payloads >256KB: Stored in S3, only S3 key in SQS message
-- **Code Location**: `internal/queue/sqs.go:16` - `maxPayloadSizeBytes` constant
-
-**Security**: Prevents SQS message size limit violations.
-
-## S3 Bucket Security
-
-### Public Access
-
-**Configuration**: All public access blocked
-- `block_public_acls = true`
-- `block_public_policy = true`
-- `ignore_public_acls = true`
-- `restrict_public_buckets = true`
-
-**Code Location**: `infra/terraform/modules/stateless/s3.tf:30-37`
-
-### Encryption
-
-**Encryption at Rest**: AES256 server-side encryption enabled
-- All objects encrypted by default
-- No additional KMS key required (uses S3 managed keys)
-
-**Code Location**: `infra/terraform/modules/stateless/s3.tf:20-28`
-
-### Access Control
-
-- **IAM Policies**: Only Lambda functions have access (via IAM roles)
-- **Ingest Lambda**: `s3:PutObject` permission
-- **Processor Lambda**: `s3:GetObject` permission
-
-**Code Location**: `infra/terraform/modules/stateless/iam.tf`
-
-## IAM Least Privilege
-
-### Separate Roles Per Lambda
-
-Each Lambda has its own IAM role:
-- `fluxa-ingest-{environment}`
-- `fluxa-processor-{environment}`
-- `fluxa-query-{environment}`
-
-**Rationale**: Minimizes blast radius if one role is compromised.
-
-### Wildcard Analysis
-
-#### Necessary Wildcards
-
-1. **CloudWatch Logs**: `arn:aws:logs:*:*:*`
-   - **Reason**: Unavoidable - Lambda needs to write to log groups that are created dynamically
-   - **Risk**: Low - only applies to CloudWatch Logs service
-   - **Location**: All Lambda IAM policies
-
-2. **CloudWatch Metrics**: `*` with namespace condition
-   - **Reason**: CloudWatch PutMetricData requires wildcard resource
-   - **Mitigation**: Namespace condition restricts to specific namespace (e.g., `Fluxa/Ingest`)
-   - **Risk**: Low - namespace restriction limits scope
-   - **Location**: All Lambda IAM policies
-
-#### No Unnecessary Wildcards
-
-All other permissions use specific ARNs:
-- SQS queue ARNs
-- S3 bucket ARNs
-- SNS topic ARNs
-- Secrets Manager secret ARNs
-
-**Code Location**: `infra/terraform/modules/stateless/iam.tf`
-
-## Network Security
-
-### RDS
-
-- **Public Access**: Disabled (`publicly_accessible = false`)
-- **VPC**: RDS in private subnets
-- **Security Groups**: Only Lambda security groups can access port 5432
-
-**Code Location**: `infra/terraform/modules/stateful/rds.tf:93`
-
-### Lambda VPC Configuration
-
-- **Dev**: Uses VPC for Lambda to connect to RDS
-- **Prod**: Uses VPC with proper security group restrictions
-- **Security Groups**: Lambda security groups allow outbound only
-
-**Code Location**: `infra/terraform/envs/dev/main.tf`, `infra/terraform/envs/prod/main.tf`
-
-## Input Validation
-
-### Schema Validation
-
-Events are validated at ingestion:
-- Required fields: `user_id`, `amount`, `currency`, `merchant`, `timestamp`
-- Amount must be > 0
-- Timestamp must be valid
-
-**Code Location**: `internal/models/event.go:19-36`
 
 ### Payload Integrity
+SHA-256 hash is computed at ingest and verified at the processor before persisting. A mismatch triggers a non-retryable discard — the message is ACKed and dropped, never retried with corrupted data.
 
-- SHA-256 hash calculated at ingest
-- Hash verified at processor
-- Mismatch triggers failure (no retry)
+- Hash computed: `services/ingest/main.go`
+- Hash verified: `services/processor/main.go`
 
-**Code Location**: 
-- Ingest: `cmd/ingest/main.go:106-108`
-- Processor: `cmd/processor/main.go:157-165`
+### Exactly-Once Processing
+Idempotency is enforced via `SELECT FOR UPDATE` on `idempotency_keys` followed by `ON CONFLICT DO NOTHING` on `events`. Duplicate messages from RabbitMQ redelivery cannot result in duplicate DB rows.
 
-## Database Security
+- Implementation: `internal/idempotency/idempotency.go`
 
-### SSL/TLS
+### Poison Message Isolation
+Malformed or schema-invalid messages are classified as `NonRetryableError` and ACKed immediately — they cannot trigger retry storms or block the queue.
 
-- **Connection**: SSL required (`DB_SSL_MODE=require`)
-- **Enforcement**: PostgreSQL connection string enforces SSL
+- Error types: `internal/domain/errors.go`
+- Classification: `services/processor/main.go`
 
-**Code Location**: `internal/config/config.go:DSN()` method
+### Secrets Never Logged
+Structured logging (`internal/logging/logger.go`) only logs correlation IDs, event IDs, service names, and latency. Passwords, tokens, and payload contents are never included in log output.
 
-### Connection Security
+### Large Payload Offload
+Event payloads exceeding 256 KB are stored in MinIO (local S3-compatible store) and referenced by key in RabbitMQ. This prevents oversized messages from reaching the broker.
 
-- **Credentials**: Retrieved from Secrets Manager
-- **Network**: RDS in private subnets, accessible only via VPC
-- **Connection Pooling**: Limited connections per Lambda (10 max)
+- Threshold: `internal/adapters/minio.go`
 
-**Code Location**: `internal/db/db.go:19-35`
+### Connection Limits
+PostgreSQL connections are pooled and capped at 10 per service (`internal/db/db.go`). This prevents connection exhaustion under load.
 
-## Security Best Practices
+---
 
-1. **Regular Secret Rotation**: Rotate database password periodically (manually or via Secrets Manager rotation)
-2. **Audit IAM Policies**: Regularly review IAM policies for unnecessary permissions
-3. **Monitor Access**: Use CloudTrail to monitor API access
-4. **Encryption in Transit**: All connections use SSL/TLS
-5. **Least Privilege**: Each Lambda has minimum required permissions
-6. **No Secrets in Code**: No hardcoded secrets, all via Secrets Manager
+## .gitignore Coverage
 
-## Security Checklist
+The following sensitive patterns are gitignored:
 
-- [x] No secrets in environment variables
-- [x] Secrets stored in Secrets Manager
-- [x] All SQL queries parameterized
-- [x] Request size limits enforced
-- [x] S3 bucket private with encryption
-- [x] IAM least privilege (minimal wildcards)
-- [x] Separate IAM roles per Lambda
-- [x] RDS not publicly accessible
-- [x] SSL/TLS enforced for database
-- [x] Input validation at ingest
-- [x] Payload integrity verification
-- [x] No secrets in logs
+```
+.env
+.env.local     # environment variable overrides
+.claude/       # Claude Code session files
+data/          # Kaggle CSV datasets (large, contains PII-adjacent data)
+out/           # build artifacts and deployment outputs
+/replay        # compiled service binaries
+/ingest
+/processor
+/query
+bootstrap
+```
 
-## Risk Assessment
+No secrets, datasets, or build artifacts should appear in `git status` on a clean checkout.
 
-| Risk | Mitigation | Status |
-|------|-----------|--------|
-| Secret leakage in logs | Code review, structured logging | ✅ Mitigated |
-| SQL injection | Parameterized queries | ✅ Mitigated |
-| Unauthorized S3 access | Private bucket, IAM policies | ✅ Mitigated |
-| Database credential exposure | Secrets Manager | ✅ Mitigated |
-| Unauthorized Lambda execution | IAM roles, API Gateway auth | ✅ Mitigated |
-| Data in transit interception | SSL/TLS enforced | ✅ Mitigated |
-| Overly permissive IAM | Least privilege, specific ARNs | ✅ Mitigated |
+---
 
+## Production Hardening
 
+If this platform were to be deployed outside a local dev machine, the following changes would be required:
+
+### Credentials
+- Replace all fixed passwords with secrets from a secrets manager (Vault, AWS Secrets Manager, GCP Secret Manager)
+- Rotate all credentials before first deployment
+- Use distinct credentials per environment (dev/staging/prod)
+
+### Network
+- Bind service ports to internal interfaces only; expose only the ingest HTTP API through a load balancer or API gateway
+- Add TLS termination at the ingress layer
+- Place PostgreSQL and RabbitMQ in a private network segment unreachable from the public internet
+
+### Database
+- Enable SSL/TLS on PostgreSQL (`DB_SSL_MODE=require`)
+- Restrict `pg_hba.conf` to application service IPs only
+- Use a dedicated DB user with minimum required privileges (no `SUPERUSER`)
+
+### RabbitMQ
+- Enable TLS on AMQP connections
+- Disable the management UI in production or place it behind auth/VPN
+- Set per-user vhost permissions
+
+### MinIO
+- Replace with a managed object store (S3, GCS) for durability
+- Enable server-side encryption and access logging
+- Apply bucket policies restricting access to service IAM roles
+
+### Grafana
+- Change the default admin password immediately
+- Disable user sign-up (`GF_USERS_ALLOW_SIGN_UP=false` is already set)
+- Enable HTTPS
+
+### Container Runtime
+- Run all containers as non-root users
+- Set read-only root filesystems where possible
+- Apply resource limits (`mem_limit`, `cpus`) per container
+
+---
+
+## Risk Summary
+
+| Risk | Local Dev Status | Production Mitigation Needed |
+|------|-----------------|------------------------------|
+| Hardcoded credentials | ✅ Acceptable (local only) | Replace with secrets manager |
+| No TLS on DB | ✅ Acceptable (localhost) | Enable `DB_SSL_MODE=require` |
+| RabbitMQ management UI exposed | ✅ Acceptable (localhost) | Restrict or disable |
+| Grafana default password | ✅ Acceptable (localhost) | Change before deployment |
+| SQL injection | ✅ Mitigated (parameterized queries) | No change needed |
+| Payload tampering | ✅ Mitigated (SHA-256 verification) | No change needed |
+| Duplicate processing | ✅ Mitigated (idempotency keys) | No change needed |
+| Poison messages | ✅ Mitigated (NonRetryableError ACK) | No change needed |
+| Secrets in logs | ✅ Mitigated (structured logging) | No change needed |
