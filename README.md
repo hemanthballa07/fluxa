@@ -60,13 +60,15 @@ open http://localhost:3000   # admin/admin → Dashboards → Fluxa Overview
 
 ## Fraud Detection Replay
 
-Download the [PaySim dataset](https://www.kaggle.com/datasets/ealaxi/paysim1) and place the CSV at `./data/transactions.csv`, then:
+Download the [IEEE-CIS Fraud Detection dataset](https://www.kaggle.com/c/ieee-fraud-detection/data) from Kaggle, rename `train_transaction.csv` to `transactions.csv`, and place it at `./data/transactions.csv`, then:
 
 ```bash
 make replay
 ```
 
-Streams ~6.3 million transactions at 200 req/s. Watch fraud flags accumulate in Grafana in real time.
+Streams ~590 000 transactions at 200 req/s. Watch fraud flags accumulate in Grafana in real time.
+
+Key columns used: `TransactionAmt` (amount), `card1` (user ID), `TransactionDT` (timestamp offset), `ProductCD` + `card4` (merchant derivation), `P_emaildomain`, `isFraud` (ground-truth label forwarded as metadata).
 
 ## Fraud Rules
 

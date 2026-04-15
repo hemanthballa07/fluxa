@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fluxa/fluxa/internal/config"
@@ -70,7 +71,6 @@ func main() {
 		colIdx[col] = i
 	}
 
-	baseTime := time.Now().UTC()
 	ticker := time.NewTicker(time.Second / time.Duration(ratePerSec))
 	defer ticker.Stop()
 
@@ -90,7 +90,7 @@ func main() {
 
 		<-ticker.C
 
-		event := mapCSVRowToEvent(row, colIdx, baseTime)
+		event := mapCSVRowToEvent(row, colIdx)
 		body, err := json.Marshal(event)
 		if err != nil {
 			failed++
@@ -127,10 +127,35 @@ func main() {
 	})
 }
 
-// mapCSVRowToEvent maps a PaySim CSV row to an ingest-compatible event payload.
-// PaySim columns: step, type, amount, nameOrig, oldbalanceOrg, newbalanceOrig,
-//                 nameDest, oldbalanceDest, newbalanceDest, isFraud, isFlaggedFraud
-func mapCSVRowToEvent(row []string, colIdx map[string]int, baseTime time.Time) map[string]interface{} {
+// merchantLookup derives a merchant name from IEEE-CIS ProductCD and card4 columns.
+// Keys are "productcd+card4" (both lowercased).
+var merchantLookup = map[string]string{
+	"w+visa":        "Amazon Marketplace",
+	"w+mastercard":  "Walmart Online",
+	"c+mastercard":  "Walmart",
+	"c+visa":        "Target",
+	"r+discover":    "Target RedCard",
+	"h+amex":        "Best Buy",
+	"s+visa":        "Steam Games",
+	"s+mastercard":  "PlayStation Store",
+}
+
+// ieeeEpoch is 2024-01-01T00:00:00Z — the fixed anchor for TransactionDT offsets.
+var ieeeEpoch = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// mapCSVRowToEvent maps an IEEE-CIS train_transaction.csv row to an ingest-compatible
+// event payload.
+//
+// Key IEEE-CIS columns used:
+//
+//	TransactionDT  — seconds since simulation start; anchored to 2024-01-01T00:00:00Z
+//	TransactionAmt — transaction amount in USD
+//	card1          — masked card identifier used as user_id
+//	ProductCD      — product category (W/C/R/H/S); combined with card4 to derive merchant
+//	card4          — card network (visa/mastercard/discover/amex)
+//	P_emaildomain  — purchaser email domain
+//	isFraud        — ground-truth fraud label (0 or 1)
+func mapCSVRowToEvent(row []string, colIdx map[string]int) map[string]interface{} {
 	get := func(col string) string {
 		if idx, ok := colIdx[col]; ok && idx < len(row) {
 			return row[idx]
@@ -138,48 +163,58 @@ func mapCSVRowToEvent(row []string, colIdx map[string]int, baseTime time.Time) m
 		return ""
 	}
 
-	// Re-stamp timestamp: step column is hours since simulation start
+	// Timestamp: fixed epoch + TransactionDT seconds.
 	var ts time.Time
-	if stepStr := get("step"); stepStr != "" {
-		if step, err := strconv.ParseFloat(stepStr, 64); err == nil {
-			ts = baseTime.Add(time.Duration(step) * time.Hour)
+	if dtStr := get("TransactionDT"); dtStr != "" {
+		if dt, err := strconv.ParseFloat(dtStr, 64); err == nil {
+			ts = ieeeEpoch.Add(time.Duration(dt) * time.Second)
 		}
 	}
 	if ts.IsZero() {
 		ts = time.Now().UTC()
 	}
 
+	// Amount.
 	amount := 0.0
-	if amtStr := get("amount"); amtStr != "" {
-		if v, err := strconv.ParseFloat(amtStr, 64); err == nil {
-			amount = v
-		}
-	}
-
-	// Default sensible values for required fields
-	userID := get("nameOrig")
-	if userID == "" {
-		userID = "unknown"
-	}
-	merchant := get("nameDest")
-	if merchant == "" {
-		merchant = "unknown"
+	if v, err := strconv.ParseFloat(get("TransactionAmt"), 64); err == nil {
+		amount = v
 	}
 	if amount <= 0 {
 		amount = 1.0
 	}
 
-	event := map[string]interface{}{
+	// User ID from card1.
+	userID := get("card1")
+	if userID == "" {
+		userID = "unknown"
+	}
+
+	// Merchant derived from ProductCD + card4.
+	productCD := get("ProductCD")
+	card4 := get("card4")
+	key := strings.ToLower(productCD) + "+" + strings.ToLower(card4)
+	merchant, ok := merchantLookup[key]
+	if !ok {
+		merchant = "merchant_" + productCD + "_" + card4
+	}
+
+	// Ground-truth fraud label — forward as-is; default "0" if absent.
+	isFraud := get("isFraud")
+	if isFraud != "1" {
+		isFraud = "0"
+	}
+
+	return map[string]interface{}{
 		"user_id":   userID,
 		"amount":    amount,
 		"currency":  "USD",
 		"merchant":  merchant,
 		"timestamp": ts.Format(time.RFC3339),
 		"metadata": map[string]interface{}{
-			"transaction_type": get("type"),
-			"is_fraud":         get("isFraud"),
+			"email_domain":           get("P_emaildomain"),
+			"card_network":           card4,
+			"product_code":           productCD,
+			"is_fraud_ground_truth":  isFraud,
 		},
 	}
-
-	return event
 }
