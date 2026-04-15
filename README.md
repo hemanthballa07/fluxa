@@ -1,723 +1,165 @@
 # Fluxa
 
-**Fluxa v1.0.0** — feature-complete, production-grade reference implementation
+A local financial transaction fraud detection platform. Streams PaySim transaction data through a multi-service pipeline, applies configurable fraud rules in real time, and surfaces results in Grafana.
 
-Fluxa is a cloud-native, event-driven data platform built on AWS to ingest, process, and persist asynchronous events using serverless architectures, message queues, and Infrastructure as Code. The system is designed for high reliability, scalability, and observability with built-in retry mechanisms, dead-letter queues, idempotency guarantees, and comprehensive monitoring.
+No cloud credentials required — runs entirely via Docker Compose on an 8 GB Mac.
 
 ## Architecture
 
-```mermaid
-graph TB
-    Client[Client Application] -->|POST /events| APIGW[API Gateway REST]
-    APIGW -->|Invoke| IngestLambda[Ingest Lambda]
+```
+CSV replay (200 req/s)
+        │
+        ▼
+POST :8080/events          GET :8083/events/:id
+   ingest-svc  ──────────────────  query-svc
+        │                               │
+        │ RabbitMQ (events queue)        │ PostgreSQL
+        ▼                               │
+  processor-svc  ─────────────────────►─┘
+        │   persist + fraud rules
+        │   write fraud_flags table
+        │
+        │ RabbitMQ (alerts fanout)
+        ▼
+  alert-consumer  (logs FRAUD ALERT to stdout)
 
-    IngestLambda -->|Validate Schema| Schema[Schema Validator]
-    IngestLambda -->|Payload > 256KB| S3[S3 Bucket<br/>raw/date/event_id.json]
-    IngestLambda -->|Send Message| SQS[SQS Queue]
-
-    SQS -->|DLQ after max receives| DLQ[Dead Letter Queue]
-    SQS -->|Trigger Batch| ProcessorLambda[Processor Lambda]
-
-    ProcessorLambda -->|Idempotency Check| IdempotencyTable[(Idempotency Keys)]
-    ProcessorLambda -->|Fetch Large Payload| S3
-    ProcessorLambda -->|Persist Event| RDS[(RDS PostgreSQL<br/>Events Table)]
-    ProcessorLambda -->|Publish Notification| SNS[SNS Topic]
-
-    Client -->|GET /events/:id| APIGW
-    APIGW -->|Invoke| QueryLambda[Query Lambda]
-    QueryLambda -->|Query| RDS
-
-    IngestLambda -->|Metrics| CloudWatch[CloudWatch Metrics]
-    ProcessorLambda -->|Metrics| CloudWatch
-    QueryLambda -->|Metrics| CloudWatch
-
-    CloudWatch -->|Alarms| Alarms[CloudWatch Alarms<br/>DLQ Depth, Lambda Errors,<br/>Lambda Throttles, API 5xx]
+Prometheus :9090   Grafana :3000
 ```
 
-For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+| Service | Port(s) | Description |
+|---------|---------|-------------|
+| ingest | 8080, 9091 | HTTP ingest + Prometheus metrics |
+| processor | 9092 | RabbitMQ consumer, fraud engine |
+| query | 8083, 9093 | HTTP query + Prometheus metrics |
+| alert-consumer | 9094 | Logs fraud alerts from RabbitMQ fanout |
+| replay | — | Streams PaySim CSV at ~200 req/s |
+| postgres | 5432 | Events, idempotency keys, fraud flags |
+| rabbitmq | 5672, 15672 | Message broker + management UI |
+| minio | 9000, 9001 | S3-compatible storage for large payloads |
+| prometheus | 9090 | Metrics scraper |
+| grafana | 3000 | Dashboard (admin/admin) |
 
-## 🚀 Quick Start & Verification
-
-**Want to see it in action?**
-👉 **[View the Step-by-Step DEMO Walkthrough](docs/DEMO.md)**
-
-> **Pro Tip**: Run the full local integration suite in 10 seconds:
-> ```bash
-> make local-up   # Start Postgres
-> make local-test # Run 50-concurrency idempotency + failure drills
-> ```
-
-## 📚 Documentation
-- **[Architecture & Trade-offs](docs/TRADEOFFS.md)**
-- **[Operational Runbook](docs/RUNBOOK.md)**: DLQ triage, replays, and alerts.
-- **[Infrastructure](infra/terraform/README.md)**: Terraform modules and deployment.
-- **[Release Notes](RELEASE_NOTES.md)**: v1.1.0 changelog.
-
-### Local Development Setup
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/yourusername/fluxa.git
-   cd fluxa
-   ```
-
-2. **Install dependencies:**
-
-   ```bash
-   make deps
-   ```
-
-3. **Run tests (no AWS credentials required):**
-
-   ```bash
-   make test
-   ```
-
-4. **Lint code:**
-
-   ```bash
-   make lint
-   ```
-
-5. **Build Lambda functions:**
-
-   ```bash
-   make build
-   ```
-
-6. **Package Lambda functions:**
-   ```bash
-   make package
-   ```
-
-### Local Test Harness
-
-We provide a standalone Go program to verify core logic without deploying to AWS. This harness tests:
-
-1.  **Idempotency**: Verifies exactly-once processing by simulating duplicate events and inspecting DB state.
-2.  **Schema Validation**: Ensures invalid payloads are rejected with correct error codes.
-3.  **Large Payloads**: Simulates payload size checks (logic for S3 offloading).
-
-**Run the harness:**
+## Quick Start
 
 ```bash
-make local-test
-```
+# 1. Start everything
+make up
 
-*Prerequisite*: `make local-up` must be running.
+# 2. Smoke test
+curl http://localhost:8080/health   # {"status":"ok"}
+curl http://localhost:8083/health   # {"status":"ok"}
 
-1. **Start local PostgreSQL:**
-
-   ```bash
-   make local-up
-   ```
-
-2. **Run local test harness:**
-
-   ```bash
-   make local-test
-   ```
-
-   This will:
-
-   - Create test event
-   - Test idempotency (same event_id processed twice = one row only)
-   - Verify CheckAndMark correctly detects already-processed events
-   - Query event from database
-
-3. **Stop local PostgreSQL:**
-   ```bash
-   make local-down
-   ```
-
-### Deployment to AWS (Dev Environment)
-
-#### Prerequisites
-
-- AWS CLI configured with appropriate credentials
-- Terraform 1.0+ installed
-- Go 1.21+ (for building Lambda functions)
-
-#### Step-by-Step Deployment
-
-1. **Build and package Lambda functions:**
-
-   ```bash
-   make package
-   ```
-
-   This creates ZIP files in `dist/` directory.
-
-2. **Configure Terraform variables:**
-
-   ```bash
-   cd infra/terraform/envs/dev
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-
-   Edit `terraform.tfvars`:
-
-   ```hcl
-   aws_region = "us-east-1"
-   db_username = "fluxa_admin"
-   db_password = "CHANGE_ME_STRONG_PASSWORD"
-
-   lambda_ingest_zip_path = "../../../../dist/ingest.zip"
-   lambda_processor_zip_path = "../../../../dist/processor.zip"
-   lambda_query_zip_path = "../../../../dist/query.zip"
-   ```
-
-3. **Configure Terraform backend (optional but recommended):**
-
-   Edit `main.tf` to configure S3 backend, or use local state for testing:
-
-   ```hcl
-   backend "s3" {
-     bucket = "your-terraform-state-bucket"
-     key    = "fluxa/dev/terraform.tfstate"
-     region = "us-east-1"
-   }
-   ```
-
-4. **Initialize Terraform:**
-
-   ```bash
-   terraform init
-   ```
-
-5. **Review planned changes:**
-
-   ```bash
-   terraform plan
-   ```
-
-6. **Apply infrastructure:**
-
-   ```bash
-   terraform apply
-   ```
-
-   This will create:
-
-   - RDS PostgreSQL instance (db.t3.micro)
-   - S3 bucket for payloads
-   - SQS queue + DLQ
-   - SNS topic
-   - API Gateway REST API
-   - Lambda functions (ingest, processor, query)
-   - CloudWatch alarms
-   - IAM roles and policies
-
-7. **Get deployment outputs:**
-
-   ```bash
-   terraform output api_endpoint
-   terraform output db_endpoint
-   terraform output sqs_queue_url
-   ```
-
-8. **Run database migrations:**
-
-   Connect to RDS and run migrations:
-
-   ```bash
-   export DB_HOST=$(terraform output -raw db_endpoint | cut -d: -f1)
-   export DB_USER=$(terraform output -raw db_username)
-   export DB_PASSWORD="your_password"
-   export DB_NAME="fluxa"
-
-   psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f ../../../../migrations/001_create_events_table.sql
-   psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f ../../../../migrations/002_create_idempotency_keys_table.sql
-   ```
-
-### Verify Deployment
-
-1. **Check API Gateway health endpoint:**
-
-   ```bash
-   API_ENDPOINT=$(terraform output -raw api_endpoint)
-   curl $API_ENDPOINT/health
-   ```
-
-   Expected: `{"status":"healthy"}`
-
-2. **Ingest a test event:**
-
-   ```bash
-   curl -X POST $API_ENDPOINT/events \
-     -H "Content-Type: application/json" \
-     -H "X-Correlation-ID: test-$(date +%s)" \
-     -d '{
-       "user_id": "test_user",
-       "amount": 99.99,
-       "currency": "USD",
-       "merchant": "Test Merchant",
-       "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
-       "metadata": {"source": "verification_test"}
-     }'
-   ```
-
-   Save the returned `event_id`.
-
-3. **Query the event (wait a few seconds for processing):**
-
-   ```bash
-   EVENT_ID="<event_id_from_step_2>"
-   curl $API_ENDPOINT/events/$EVENT_ID
-   ```
-
-4. **Check CloudWatch metrics:**
-
-   - Open AWS Console → CloudWatch → Metrics
-   - Namespace: `Fluxa/Ingest`, `Fluxa/Processor`, `Fluxa/Query`
-   - Verify metrics: `ingest_success`, `processed_success`, `sqs_sent`
-
-5. **Check CloudWatch Logs:**
-
-   - Open AWS Console → CloudWatch → Log Groups
-   - Look for `/aws/lambda/fluxa-ingest-dev`, `/aws/lambda/fluxa-processor-dev`, `/aws/lambda/fluxa-query-dev`
-   - Verify structured JSON logs with correlation IDs
-
-6. **Verify SQS queue:**
-
-   ```bash
-   QUEUE_URL=$(terraform output -raw sqs_queue_url)
-   aws sqs get-queue-attributes --queue-url $QUEUE_URL --attribute-names ApproximateNumberOfMessages
-   ```
-
-7. **Check CloudWatch alarms:**
-   - Open AWS Console → CloudWatch → Alarms
-   - Verify alarms are created (should be in OK state initially)
-   - Alarms: `fluxa-dlq-depth-dev`, `fluxa-ingest-errors-dev`, etc.
-
-For production deployment, see the [prod environment configuration](infra/terraform/envs/prod/).
-
-## API Examples
-
-### Ingest Event
-
-```bash
-curl -X POST https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/events \
+# 3. Ingest an event
+curl -X POST http://localhost:8080/events \
   -H "Content-Type: application/json" \
-  -H "X-Correlation-ID: my-correlation-id" \
-  -d '{
-    "user_id": "user123",
-    "amount": 99.99,
-    "currency": "USD",
-    "merchant": "Amazon",
-    "timestamp": "2024-01-15T10:30:00Z",
-    "metadata": {
-      "source": "web",
-      "campaign": "summer_sale"
-    }
-  }'
+  -d '{"user_id":"u1","amount":50.00,"currency":"USD","merchant":"Amazon","timestamp":"2026-01-01T12:00:00Z"}'
+
+# 4. Open Grafana
+open http://localhost:3000   # admin/admin → Dashboards → Fluxa Overview
 ```
 
-**Response:**
+## Fraud Detection Replay
 
-```json
-{
-  "event_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "enqueued"
-}
-```
-
-### Query Event
+Download the [PaySim dataset](https://www.kaggle.com/datasets/ealaxi/paysim1) and place the CSV at `./data/transactions.csv`, then:
 
 ```bash
-curl -X GET https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/events/550e8400-e29b-41d4-a716-446655440000 \
-  -H "X-Correlation-ID: my-correlation-id"
+make replay
 ```
 
-**Response:**
+Streams ~6.3 million transactions at 200 req/s. Watch fraud flags accumulate in Grafana in real time.
 
-```json
-{
-  "event_id": "550e8400-e29b-41d4-a716-446655440000",
-  "correlation_id": "my-correlation-id",
-  "user_id": "user123",
-  "amount": 99.99,
-  "currency": "USD",
-  "merchant": "Amazon",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "metadata": {
-    "source": "web",
-    "campaign": "summer_sale"
-  },
-  "payload_mode": "INLINE",
-  "created_at": "2024-01-15T10:30:01Z"
-}
+## Fraud Rules
+
+Rules are loaded from `rules.yaml` at processor startup — edit and restart the processor container, no rebuild needed:
+
+```yaml
+amount_threshold: 10000.00        # flag transactions above this USD amount
+velocity_window_seconds: 300      # velocity check window
+velocity_max_count: 10            # max transactions per user in window
+blocked_merchants:                # exact-match merchant names
+  - "FraudMerchant1"
+high_risk_currencies:             # flag these currency codes
+  - "XMR"
+  - "ZEC"
 ```
 
-### Health Check
+All rules are evaluated independently (all-match, not first-match).
+
+## API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/events` | Ingest a transaction event → `202 {"event_id":"…","status":"enqueued"}` |
+| `GET` | `/events/:id` | Retrieve a persisted event → `200` or `404` |
+| `GET` | `/health` | Liveness check → `{"status":"ok"}` |
+| `GET` | `/metrics` | Prometheus scrape endpoint (on port 9091–9094) |
+
+## Makefile
 
 ```bash
-curl https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/health
-```
-
-**Response:**
-
-```json
-{
-  "status": "healthy"
-}
+make up       # Build images and start all services
+make down     # Stop and remove containers
+make replay   # Start dataset replay (requires ./data/transactions.csv)
+make logs     # Follow logs for all services
+make ps       # Show container status
+make test     # Run Go unit tests
+make lint     # Run golangci-lint
+make clean    # Stop containers and remove volumes
 ```
 
 ## Observability
 
-### Metrics
+**Prometheus metrics** (scraped every 15s from each service):
 
-The system emits custom CloudWatch metrics using Embedded Metric Format:
+| Metric | Type | Description |
+|--------|------|-------------|
+| `events_ingested_total` | Counter | Accepted ingest requests |
+| `events_processed_total{status}` | Counter | Processor outcomes (success/failure) |
+| `fraud_flags_total{rule}` | Counter | Fraud flags by rule name |
+| `query_total{status}` | Counter | Query outcomes |
+| `alerts_consumed_total` | Counter | Alerts consumed |
+| `ingest_latency_seconds` | Histogram | End-to-end ingest latency |
+| `process_latency_seconds` | Histogram | Per-message processor latency |
 
-**Ingest Lambda:**
+**Grafana dashboard** (auto-provisioned at startup):
+- Row 1 — Traffic: ingested rate, processed rate, p99 latency
+- Row 2 — Fraud: fraud rate %, flags by rule (bar), flags over time (line)
+- Row 3 — DB-direct: top flagged merchants, tx volume (5-min buckets), active flags by rule (pie)
 
-- `ingest_success` - Successful event ingestions
-- `ingest_failure` - Failed event ingestions
-- `s3_puts` - Number of large payloads stored in S3
-- `sqs_sent` - Messages successfully enqueued
+## Reliability
 
-**Processor Lambda:**
-
-- `processed_success` - Successfully processed events
-- `processed_failure` - Failed processing attempts
-- `db_latency_ms` - Database operation latency
-
-**Query Lambda:**
-
-- `query_success` - Successful queries
-- `query_failure` - Failed queries
-- `query_not_found` - 404 responses
-
-### CloudWatch Alarms
-
-The following alarms are configured:
-
-1. **DLQ Depth Alarm** - Triggers when messages appear in Dead Letter Queue
-2. **Lambda Error Rate** - Triggers when error rate exceeds threshold
-3. **Lambda Throttles** - Triggers when Lambda functions are throttled
-4. **API Gateway 5xx Errors** - Triggers when API returns 5xx errors
-
-### Structured Logging
-
-All logs are emitted in JSON format with correlation IDs for end-to-end tracing:
-
-```json
-{
-  "timestamp": "2024-01-15T10:30:00Z",
-  "level": "INFO",
-  "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
-  "message": "Successfully enqueued event",
-  "fields": {
-    "event_id": "550e8400-e29b-41d4-a716-446655440000",
-    "payload_mode": "INLINE"
-  }
-}
-```
-
-## Reliability Features
-
-### Schema Validation
-
-Events are validated at ingestion time to prevent invalid data from entering the system.
-
-### Idempotency
-
-The processor Lambda implements idempotency checks using a dedicated `idempotency_keys` table. Events are identified by `event_id`, and duplicate processing attempts are safely skipped.
-
-### Retry with Exponential Backoff
-
-SQS automatically retries failed messages with exponential backoff. The visibility timeout is set to 6x the Lambda timeout to prevent messages from becoming visible during processing.
-
-### Dead Letter Queue
-
-Messages that fail after maximum receive count (3) are moved to a Dead Letter Queue for manual investigation and remediation. See [docs/RUNBOOK.md](docs/RUNBOOK.md) for DLQ handling procedures.
-
-### Correlation IDs
-
-Correlation IDs are propagated end-to-end:
-
-- Generated or extracted from request headers at API Gateway
-- Included in SQS message attributes
-- Logged in all structured logs
-- Stored in database records
-
-### Payload Integrity
-
-All payloads include SHA-256 hashes for integrity verification. Large payloads (>256KB) are stored in S3 to reduce SQS message size while maintaining integrity checks.
-
-## Cost Notes
-
-### Estimated Monthly Costs (Dev Environment, Low-Medium Load)
-
-- **Lambda**: ~$5-20 (depends on invocations and memory)
-- **SQS**: ~$1-5 (first 1M requests free)
-- **S3**: ~$1-10 (depends on payload size and access patterns)
-- **RDS**: ~$15-50 (db.t3.micro to db.t3.small)
-- **API Gateway**: ~$3.50 per million requests
-- **CloudWatch**: ~$5-15 (logs and metrics)
-
-**Total**: ~$30-100/month for dev environment
-
-### Cost Optimization
-
-- Small payloads (≤256KB) are stored inline in SQS to avoid S3 costs
-- Large payloads are stored in S3 with lifecycle policies (90-day expiration)
-- Serverless architecture means you only pay for actual usage
-- Consider RDS Reserved Instances for predictable production workloads
+- **Idempotency** — `SELECT FOR UPDATE` on `idempotency_keys` + `ON CONFLICT DO NOTHING` on `events`
+- **Hash verification** — SHA-256 checked before persisting; mismatch → non-retryable, message ACKed and discarded
+- **Error classification** — `NonRetryableError` → ACK; all other errors → NACK with requeue
+- **Large payloads** — events >256 KB are stored in MinIO; inline reference in RabbitMQ message
 
 ## Project Structure
 
 ```
 fluxa/
-├── cmd/                    # Lambda function entry points
-│   ├── ingest/            # Event ingestion Lambda
-│   ├── processor/         # Event processing Lambda
-│   └── query/             # Event query Lambda
-├── internal/              # Internal packages
-│   ├── config/           # Configuration management
-│   ├── db/               # Database operations
-│   ├── idempotency/      # Idempotency logic
-│   ├── logging/          # Structured logging
-│   ├── metrics/          # CloudWatch metrics
-│   ├── models/           # Data models
-│   ├── queue/            # SQS operations
-│   └── storage/          # S3 operations
-├── migrations/            # Database migrations
-├── infra/                # Infrastructure as Code
-│   └── terraform/
-│       ├── modules/
-│       │   ├── stateless/ # Stateless resources (Lambda, SQS, S3, etc.)
-│       │   └── stateful/  # Stateful resources (RDS)
-│       └── envs/
-│           ├── dev/      # Dev environment
-│           └── prod/     # Prod environment
-├── docs/                 # Documentation
-│   ├── ARCHITECTURE.md   # Architecture details
-│   ├── RUNBOOK.md        # Operational procedures
-│   └── TRADEOFFS.md      # Design decisions and tradeoffs
-├── scripts/              # Utility scripts
-│   ├── seed_events.sh    # Seed sample events
-│   └── load_test.sh      # Load testing script
-└── .github/
-    └── workflows/
-        └── ci.yml        # GitHub Actions CI pipeline
+├── services/               Long-running Go services
+│   ├── ingest/             HTTP ingest server (:8080)
+│   ├── processor/          RabbitMQ consumer + fraud engine
+│   ├── query/              HTTP query server (:8083)
+│   ├── replay/             PaySim CSV streamer
+│   └── alert-consumer/     Fraud alert logger
+├── internal/
+│   ├── ports/              Publisher, Consumer, Storage, Metrics interfaces
+│   ├── adapters/           RabbitMQ, MinIO, Prometheus implementations
+│   ├── domain/             Event, FraudFlag, QueueMessage, errors
+│   ├── fraud/              Rules engine (YAML-driven, all-match)
+│   ├── config/             Environment-based config
+│   ├── db/                 PostgreSQL client
+│   ├── idempotency/        Exactly-once processing
+│   └── logging/            Structured JSON logger
+├── migrations/             001 events, 002 idempotency_keys, 003 fraud_flags
+├── deploy/
+│   ├── prometheus/         Scrape config
+│   └── grafana/            Dashboard JSON + auto-provisioning
+├── rules.yaml              Fraud rules (hot-reload via container restart)
+└── docker-compose.yml      Full local stack
 ```
-
-## Makefile Targets
-
-- `make help` - Show available targets
-- `make build` - Build all Lambda functions
-- `make test` - Run all tests with coverage
-- `make lint` - Run golangci-lint
-- `make clean` - Remove build artifacts
-- `make package` - Package Lambda functions as ZIP files
-- `make terraform-fmt` - Format Terraform files
-- `make terraform-validate` - Validate Terraform configuration
-- `make deploy-dev` - Prepare deployment to dev (requires terraform apply)
-- `make deploy-prod` - Prepare deployment to prod (requires terraform apply)
-- `make ci` - Run all CI checks (lint, test, terraform)
-
-## Development
-
-### Running Tests
-
-```bash
-make test
-```
-
-Tests don't require AWS credentials and can run locally.
-
-### Database Migrations
-
-Apply migrations to your database:
-
-```bash
-psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f migrations/001_create_events_table.sql
-psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f migrations/002_create_idempotency_keys_table.sql
-```
-
-### Local Testing with Scripts
-
-```bash
-# Seed sample events
-export API_ENDPOINT=https://your-api-id.execute-api.us-east-1.amazonaws.com/dev
-./scripts/seed_events.sh
-
-# Run load test
-./scripts/load_test.sh
-```
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md) - System architecture and data flow
-- [Runbook](docs/RUNBOOK.md) - Operational procedures and troubleshooting
-- [Tradeoffs](docs/TRADEOFFS.md) - Design decisions and alternatives
-
-## Portfolio Proof (5–10 Minute Verification)
-
-This project is designed to be easily verifiable by reviewers. Follow the steps below to confirm correctness, reliability, and observability.
-
-### 1. Deploy Infrastructure
-```bash
-cd infra/terraform/envs/dev
-terraform init
-terraform apply
-```
-
-Expected:
-
-* Terraform completes without errors
-* AWS resources created (Lambda, SQS + DLQ, S3, RDS, API Gateway)
-
----
-
-### 2. Run Database Migrations
-
-```bash
-psql -h <db_host> -U <db_user> -d fluxa -f migrations/001_create_events_table.sql
-psql -h <db_host> -U <db_user> -d fluxa -f migrations/002_create_idempotency_keys_table.sql
-```
-
-Expected:
-
-* Tables created successfully
-* No migration errors
-
----
-
-### 3. Ingest an Event
-
-```bash
-curl -X POST $API_ENDPOINT/events \
-  -H "Content-Type: application/json" \
-  -H "X-Correlation-ID: demo-$(date +%s)" \
-  -d '{
-    "user_id": "demo_user",
-    "amount": 42.50,
-    "currency": "USD",
-    "merchant": "Demo Store",
-    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
-  }'
-```
-
-Expected:
-
-* Response includes `event_id`
-* Status is `enqueued`
-
----
-
-### 4. Query the Event
-
-```bash
-curl $API_ENDPOINT/events/<event_id>
-```
-
-Expected:
-
-* Event returned within ~30 seconds
-* Data matches ingested payload
-
----
-
-### 5. Verify Observability
-
-* **CloudWatch Metrics**
-  * `ingest_success`
-  * `processed_success`
-* **CloudWatch Logs**
-  * Structured JSON logs
-  * Correlation ID visible end-to-end
-* **Alarms**
-  * All alarms in OK state
-  * DLQ depth = 0
-
----
-
-### 6. Capture Performance Metrics (Optional, Resume-Grade)
-
-```bash
-./scripts/capture_metrics.sh
-```
-
-Generates:
-
-* p95 ingest latency
-* p95 processing latency
-* Throughput (events/min)
-* Error and DLQ counts
-
-Outputs saved to `out/metrics.md` and `out/metrics.json`.
-
----
-
-### 7. Failure & Recovery Drill (Optional)
-
-* Send malformed payload → validation error
-* Simulate processor failure → message routed to DLQ
-* Replay DLQ safely (idempotent)
-
-See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) for exact commands.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Releases
-
-Fluxa uses semantic versioning. Releases are created automatically when tags matching `v*` are pushed to the repository.
-
-### Creating a Release
-
-1. **Ensure all tests pass**:
-
-   ```bash
-   make ci
-   ```
-
-2. **Update version and release notes**:
-
-   - Update version in `RELEASE_NOTES.md`
-   - Update version notice in `README.md` if needed
-
-3. **Create and push tag**:
-
-   ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin v1.0.0
-   ```
-
-4. **GitHub Actions will automatically**:
-   - Run tests and linting
-   - Create a GitHub Release with `RELEASE_NOTES.md` content
-   - Attach release notes to the release
-
-### Release Workflow
-
-The `.github/workflows/release.yml` workflow:
-
-- Triggers on tag push matching `v*`
-- Runs all tests and linting checks
-- Creates GitHub Release with release notes
-- Fails if tests or linting fail (prevents broken releases)
-
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the latest release information.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run `make ci` to ensure all checks pass
-5. Submit a pull request
-
-## Security
-
-- IAM roles follow least-privilege principles
-- Database credentials stored in AWS Secrets Manager
-- S3 bucket is private with encryption at rest
-- SQL queries use parameterized statements
-- VPC security groups restrict network access
-
-For security concerns, please contact the maintainers.
+MIT

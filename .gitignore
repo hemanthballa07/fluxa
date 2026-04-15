@@ -51,3 +51,6 @@ bootstrap
 
 # Dataset (Kaggle CSV — do not commit)
 data/
+
+# Claude Code session files
+.claude/
