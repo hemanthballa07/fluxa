@@ -179,7 +179,7 @@ func (c *Client) CountRecentEvents(userID string, windowSeconds int) (int, error
 		SELECT COUNT(*)
 		FROM events
 		WHERE user_id = $1
-		  AND ts >= NOW() - ($2 * INTERVAL '1 second')
+		  AND created_at >= NOW() - ($2 * INTERVAL '1 second')
 	`
 
 	var count int

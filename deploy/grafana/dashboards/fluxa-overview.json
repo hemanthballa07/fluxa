@@ -2,9 +2,9 @@
   "title": "Fluxa Overview",
   "uid": "fluxa-overview",
   "schemaVersion": 36,
-  "version": 2,
+  "version": 3,
   "refresh": "10s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": { "from": "now-3h", "to": "now" },
   "templating": { "list": [] },
   "annotations": { "list": [] },
   "panels": [
@@ -60,7 +60,7 @@
       "gridPos": { "x": 0, "y": 8, "w": 8, "h": 8 },
       "targets": [
         {
-          "expr": "rate(fraud_flags_total[5m]) / rate(events_processed_total[5m]) * 100",
+          "expr": "sum(rate(fraud_flags_total[5m])) / sum(rate(events_processed_total[5m])) * 100",
           "legendFormat": "fraud %",
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
         }
@@ -99,14 +99,15 @@
     },
     {
       "id": 7,
-      "title": "Top Flagged Merchants (last hour)",
+      "title": "Top Flagged Merchants",
       "type": "table",
       "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
       "datasource": { "type": "postgres", "uid": "fluxa-postgres" },
       "targets": [
         {
           "datasource": { "type": "postgres", "uid": "fluxa-postgres" },
-          "rawSql": "SELECT e.merchant, COUNT(*) AS flags FROM events e JOIN fraud_flags f ON e.event_id = f.event_id WHERE f.flagged_at > NOW() - INTERVAL '1 hour' GROUP BY e.merchant ORDER BY flags DESC LIMIT 10",
+          "rawSql": "SELECT e.merchant, COUNT(*) AS flags FROM events e JOIN fraud_flags f ON e.event_id = f.event_id WHERE f.flagged_at > '2024-01-01' GROUP BY e.merchant ORDER BY flags DESC LIMIT 10",
+          "rawQuery": true,
           "format": "table"
         }
       ]
@@ -120,21 +121,23 @@
       "targets": [
         {
           "datasource": { "type": "postgres", "uid": "fluxa-postgres" },
-          "rawSql": "SELECT date_trunc('minute', ts) AS time, COUNT(*) AS tx_count FROM events WHERE ts > NOW() - INTERVAL '1 hour' GROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('day', ts) AS time, COUNT(*) AS tx_count FROM events WHERE ts > '2024-01-01' GROUP BY 1 ORDER BY 1",
+          "rawQuery": true,
           "format": "time_series"
         }
       ]
     },
     {
       "id": 9,
-      "title": "Active Fraud Flags by Rule (last hour)",
+      "title": "Active Fraud Flags by Rule",
       "type": "piechart",
       "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
       "datasource": { "type": "postgres", "uid": "fluxa-postgres" },
       "targets": [
         {
           "datasource": { "type": "postgres", "uid": "fluxa-postgres" },
-          "rawSql": "SELECT rule_name, COUNT(*) AS count FROM fraud_flags WHERE flagged_at > NOW() - INTERVAL '1 hour' GROUP BY rule_name ORDER BY count DESC",
+          "rawSql": "SELECT rule_name, COUNT(*) AS count FROM fraud_flags WHERE flagged_at > '2024-01-01' GROUP BY rule_name ORDER BY count DESC",
+          "rawQuery": true,
           "format": "table"
         }
       ]

@@ -1,6 +1,6 @@
 # Fluxa — Project Status Tracker
 
-_Last updated: 2026-04-14_
+_Last updated: 2026-04-15_
 
 ---
 
@@ -82,14 +82,22 @@ Prometheus :9090   Grafana :3000
   - Merchant derivation from `ProductCD` + `card4` lookup table (8 entries + default)
   - Metadata: `P_emaildomain`, `card4`, `ProductCD`, `is_fraud_ground_truth`
 - [x] Updated README: replaced PaySim dataset link with IEEE-CIS Kaggle link; updated file rename instructions and column notes
-- [ ] Verify end-to-end: fraud flags accumulate in Grafana during replay
+- [x] **End-to-end verified**: all three fraud rules firing on live IEEE-CIS data
+  - `amount_threshold`: ~4% of transactions flagged (16k+ flags)
+  - `blocked_merchant`: Amazon Marketplace, Walmart Online, Target firing
+  - `velocity`: confirmed via test — 3 hits in 60s crosses threshold
+- [x] Grafana dashboard fully operational — all 9 panels showing data
+  - Fixed Prometheus fraud rate gauge (label mismatch — added `sum()`)
+  - Fixed all Postgres panels (added `rawQuery: true`)
+  - Fixed time range conflict (`now-3h` for Prometheus; hardcoded `2024-01-01` for Postgres panels)
+- [x] `CountRecentEvents` bug fixed: switched from `ts` to `created_at` so velocity check works on replay data with historical timestamps
+- [x] `rules.yaml` tuned for IEEE-CIS: `amount_threshold: 500`, `velocity_window_seconds: 60`, `velocity_max_count: 3`, real merchant names
+- [x] Grafana dashboard screenshot saved to `docs/grafana-dashboard.png`
 
 ---
 
 ## Next
 
-- [ ] **Replay verified** — confirm IEEE-CIS replay drives fraud flags in Grafana as expected
 - [ ] **README badges** — build status, Go version, license badges
-- [ ] **Portfolio polish** — architecture diagram image, demo GIF or screenshot, concise project summary for portfolio/LinkedIn
-- [ ] _(Optional)_ Forward `isFraud` ground-truth label in metadata for precision/recall analysis
-- [ ] _(Optional)_ Tune fraud rules thresholds against IEEE-CIS distribution (e.g., amount threshold calibration)
+- [ ] **Portfolio polish** — architecture diagram image, demo GIF, concise project summary for portfolio/LinkedIn
+- [ ] _(Optional)_ Add Grafana panel comparing rules-detected fraud vs. `is_fraud_ground_truth` label (precision/recall overlay)

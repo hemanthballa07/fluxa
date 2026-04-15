@@ -4,17 +4,25 @@ All significant changes, in reverse chronological order.
 
 ---
 
-## [Unreleased] — In Progress
+## 2026-04-15 — IEEE-CIS Replay Integration + Grafana Fix
 
-### IEEE-CIS Replay Integration
-- Spec written and approved (`docs/specs/ieee-cis-replay.md`)
-- `services/replay/main.go`: replaced PaySim `mapCSVRowToEvent` with IEEE-CIS mapper
-  - `TransactionAmt` → `amount`; `card1` → `user_id`
-  - `TransactionDT` anchored to `2024-01-01T00:00:00Z` + seconds offset
-  - Merchant derived from `ProductCD` + `card4` lookup table (8 named entries + `"merchant_<P>_<C>"` default)
-  - Metadata: `email_domain` (`P_emaildomain`), `card_network` (`card4`), `product_code` (`ProductCD`), `is_fraud_ground_truth` (`isFraud` as `"0"` or `"1"`)
-- `README.md`: replaced PaySim dataset section with IEEE-CIS Kaggle link and updated file rename instructions
-- Pending: end-to-end verification with Grafana
+**Commits:** `cb5052a` (replay mapper), this commit (rules + dashboard + velocity fix)
+
+### Added
+- IEEE-CIS replay mapper (`services/replay/main.go`): `TransactionAmt`/`card1`/`TransactionDT`/`ProductCD`+`card4` → ingest event; `isFraud` forwarded as `is_fraud_ground_truth` metadata
+- `docs/grafana-dashboard.png` — dashboard screenshot for portfolio
+
+### Fixed
+- `internal/db/db.go` `CountRecentEvents`: switched `ts` → `created_at` for velocity window query; `ts` holds simulated transaction time so velocity checks would never fire on replay data with historical timestamps
+- Grafana dashboard Postgres panels: added `"rawQuery": true` to all three targets (panels 7, 8, 9) — without it Grafana ignores `rawSql` and returns no data
+- Grafana Fraud Rate gauge: wrapped both sides of division in `sum()` to resolve label mismatch between `fraud_flags_total{rule=...}` and `events_processed_total{service=...,status=...}`
+- Dashboard time range: `now-1h` → `now-3h` for Prometheus panels; Postgres panels now use hardcoded `'2024-01-01'` lower bound instead of `$__timeFilter` to decouple from the time picker; day-level bucketing for transaction volume panel
+
+### Changed
+- `rules.yaml`: `amount_threshold` 10000 → 500 (fires on ~4% of IEEE-CIS transactions); `velocity_window_seconds` 300 → 60; `velocity_max_count` 5 → 3; replaced PaySim placeholder merchants with real IEEE-CIS merchant names: `Amazon Marketplace`, `Walmart Online`, `Target`
+
+### Verified end-to-end
+- 500k+ events processed; 16k+ `amount_threshold` flags; `blocked_merchant` firing on top-3 merchants; `velocity` confirmed via test (3 transactions in <60s triggers flag)
 
 ---
 
