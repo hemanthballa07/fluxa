@@ -63,7 +63,7 @@ func main() {
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 func handleGetEvent(w http.ResponseWriter, r *http.Request) {
@@ -126,5 +126,5 @@ func handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Correlation-ID", correlationID)
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write(respBytes)
+	_, _ = w.Write(respBytes)
 }

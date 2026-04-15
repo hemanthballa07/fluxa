@@ -161,14 +161,7 @@ func (p *Processor) evaluateFraud(ctx context.Context, event *domain.Event) {
 
 		p.Metrics.IncCounter("fraud_flags_total", "rule", flag.RuleName)
 
-		alertMsg := domain.AlertMessage{
-			FlagID:    flag.FlagID,
-			EventID:   flag.EventID,
-			UserID:    flag.UserID,
-			RuleName:  flag.RuleName,
-			RuleValue: flag.RuleValue,
-			FlaggedAt: flag.FlaggedAt,
-		}
+		alertMsg := domain.AlertMessage(flag)
 		body, err := json.Marshal(alertMsg)
 		if err != nil {
 			p.Logger.Error("Failed to marshal alert message", err)
