@@ -17,7 +17,7 @@ import (
 // noopMetrics satisfies ports.Metrics for tests without importing the prometheus adapter.
 type noopMetrics struct{}
 
-func (n *noopMetrics) IncCounter(name string, labels ...string)                    {}
+func (n *noopMetrics) IncCounter(name string, labels ...string)                      {}
 func (n *noopMetrics) ObserveHistogram(name string, value float64, labels ...string) {}
 
 func getTestDB(t *testing.T) *db.Client {

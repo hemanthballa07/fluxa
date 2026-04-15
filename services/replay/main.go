@@ -130,14 +130,14 @@ func main() {
 // merchantLookup derives a merchant name from IEEE-CIS ProductCD and card4 columns.
 // Keys are "productcd+card4" (both lowercased).
 var merchantLookup = map[string]string{
-	"w+visa":        "Amazon Marketplace",
-	"w+mastercard":  "Walmart Online",
-	"c+mastercard":  "Walmart",
-	"c+visa":        "Target",
-	"r+discover":    "Target RedCard",
-	"h+amex":        "Best Buy",
-	"s+visa":        "Steam Games",
-	"s+mastercard":  "PlayStation Store",
+	"w+visa":       "Amazon Marketplace",
+	"w+mastercard": "Walmart Online",
+	"c+mastercard": "Walmart",
+	"c+visa":       "Target",
+	"r+discover":   "Target RedCard",
+	"h+amex":       "Best Buy",
+	"s+visa":       "Steam Games",
+	"s+mastercard": "PlayStation Store",
 }
 
 // ieeeEpoch is 2024-01-01T00:00:00Z — the fixed anchor for TransactionDT offsets.
@@ -211,10 +211,10 @@ func mapCSVRowToEvent(row []string, colIdx map[string]int) map[string]interface{
 		"merchant":  merchant,
 		"timestamp": ts.Format(time.RFC3339),
 		"metadata": map[string]interface{}{
-			"email_domain":           get("P_emaildomain"),
-			"card_network":           card4,
-			"product_code":           productCD,
-			"is_fraud_ground_truth":  isFraud,
+			"email_domain":          get("P_emaildomain"),
+			"card_network":          card4,
+			"product_code":          productCD,
+			"is_fraud_ground_truth": isFraud,
 		},
 	}
 }

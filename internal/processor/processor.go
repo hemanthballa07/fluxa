@@ -20,8 +20,8 @@ import (
 type Processor struct {
 	DB          *db.Client
 	Idempotency *idempotency.Client
-	Storage     ports.Storage    // MinIO adapter
-	Publisher   ports.Publisher  // RabbitMQ adapter (alerts exchange)
+	Storage     ports.Storage   // MinIO adapter
+	Publisher   ports.Publisher // RabbitMQ adapter (alerts exchange)
 	Fraud       *fraud.Engine
 	Metrics     ports.Metrics
 	Logger      *logging.Logger

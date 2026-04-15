@@ -121,8 +121,8 @@ type delivery struct {
 	d amqp.Delivery
 }
 
-func (d *delivery) Body() []byte     { return d.d.Body }
-func (d *delivery) Ack() error       { return d.d.Ack(false) }
+func (d *delivery) Body() []byte            { return d.d.Body }
+func (d *delivery) Ack() error              { return d.d.Ack(false) }
 func (d *delivery) Nack(requeue bool) error { return d.d.Nack(false, requeue) }
 
 // Delivery is the interface that wraps a single received AMQP message.
