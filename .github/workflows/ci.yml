@@ -111,42 +111,18 @@ jobs:
           name: codecov-umbrella
 
   build:
-    name: Build Lambda Functions
+    name: Build Services
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-      
-      - name: Build Lambda functions
-        run: |
-          mkdir -p dist
-          for dir in cmd/ingest cmd/processor cmd/query; do
-            name=$(basename $dir)
-            echo "Building $name..."
-            cd $dir
-            GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap main.go
-            mv bootstrap ../../dist/$name
-            cd ../..
-          done
-      
-      - name: Package Lambda functions
-        run: |
-          cd dist
-          for dir in ingest processor query; do
-            zip -r ${dir}.zip ${dir} > /dev/null
-            rm -rf ${dir}
-          done
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: lambda-packages
-          path: dist/*.zip
-          retention-days: 7
+
+      - name: Build all services
+        run: go build ./services/...
 
   terraform:
     name: Validate Terraform
