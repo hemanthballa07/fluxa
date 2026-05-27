@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package fluxa.fraud.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/fluxa/fluxa/internal/grpc/fraud/v1;fraudv1";
+option java_package = "com.fluxa.fraud.v1";
+option java_multiple_files = true;
+
+// FraudEval is the synchronous fraud evaluation surface.
+// Async ingest via RabbitMQ remains the path of record for offline replay and
+// analytics; this RPC exists for hot-path callers (bankops-portal) that need
+// a decision before committing a transaction.
+service FraudEval {
+  // EvaluateTransaction runs all configured rules against the transaction and
+  // returns a decision plus the flags that fired. The caller decides what to
+  // do with flagged transactions (HELD, DENIED, allowed-with-case, etc.) —
+  // Fluxa is a detection service, not an enforcement engine.
+  //
+  // Latency SLO: p99 < 50ms with rules-only evaluation; <100ms with the ML
+  // scorer enabled. The server returns latency_ms in the response so callers
+  // can verify.
+  rpc EvaluateTransaction(EvaluateRequest) returns (EvaluateResponse);
+}
+
+message EvaluateRequest {
+  // event_id is supplied by the caller and used as the primary key in
+  // Fluxa's events table. For bankops-portal, this is the transaction's
+  // correlation_id (UUID string) so OpenTelemetry traces line up across
+  // services.
+  string event_id = 1;
+
+  // user_id is an opaque string. Bankops-portal passes its Long account_id
+  // as a string; other future callers can use whatever identifier they have.
+  // No type coupling across services.
+  string user_id = 2;
+
+  double amount = 3;
+
+  // ISO 4217 currency code (e.g. "USD"). Empty allowed only for callers that
+  // omit currency entirely; the high_risk_currencies rule will simply not
+  // fire.
+  string currency = 4;
+
+  string merchant = 5;
+
+  // Transaction time as observed by the caller. May differ from server-side
+  // receive time on replayed historical data; rules that care about wall
+  // clock use server time, rules that care about ordering use this field.
+  google.protobuf.Timestamp transaction_time = 6;
+
+  // Free-form metadata pinned to string values for wire simplicity. Callers
+  // that need nested structure encode JSON in the value.
+  map<string, string> metadata = 7;
+}
+
+message EvaluateResponse {
+  Decision decision = 1;
+
+  // Flags is the list of every rule that fired (all-match, not first-match —
+  // matching the existing rules engine behavior). Empty when decision is
+  // DECISION_ALLOW.
+  repeated FraudFlag flags = 2;
+
+  // Server-measured evaluation latency, returned for caller-side SLO checks
+  // and k6 test assertions.
+  double latency_ms = 3;
+
+  // Identifies which version of the eval logic produced this response.
+  // Example: "fluxa-rules-v1.2", "fluxa-rules+ml-v2.0". Lets callers track
+  // when blended scoring becomes available.
+  string evaluated_by = 4;
+}
+
+enum Decision {
+  DECISION_UNSPECIFIED = 0;
+
+  // No rules fired. Caller should proceed normally.
+  DECISION_ALLOW = 1;
+
+  // One or more rules fired. Caller inspects `flags` and decides what to do.
+  // Bankops-portal's convention: any flag → transaction goes to HELD state
+  // and a SupportCase is auto-created.
+  DECISION_FLAG = 2;
+}
+
+message FraudFlag {
+  // Stable rule identifier, matching the names in rules.yaml and the existing
+  // fraud_flags.rule_name column: "amount_threshold", "velocity",
+  // "blocked_merchant", "high_risk_currency", and future ML-derived names.
+  string rule_name = 1;
+
+  // Human-readable reason — e.g. "amount=12500.00 > threshold=10000.00".
+  // Surfaced directly in the bankops-portal SupportCase description.
+  string rule_value = 2;
+}

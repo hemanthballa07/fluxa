@@ -98,6 +98,9 @@ Prometheus :9090   Grafana :3000
 
 ## Next
 
+The next major initiative is the **fintech infrastructure trifecta** — integrating `fluxa` with `bankops-portal` (bank backend) and `fluxguard` (rate limiter) under a single Next.js + TS ops console. Full plan, build sequence, resume bullets, and `bankops-portal` audit results in **[`docs/PORTFOLIO_NARRATIVE.md`](PORTFOLIO_NARRATIVE.md)**.
+
+Tactical, smaller items that remain valid regardless of the trifecta path:
 - [ ] **README badges** — build status, Go version, license badges
 - [ ] **Portfolio polish** — architecture diagram image, demo GIF, concise project summary for portfolio/LinkedIn
 - [ ] _(Optional)_ Add Grafana panel comparing rules-detected fraud vs. `is_fraud_ground_truth` label (precision/recall overlay)

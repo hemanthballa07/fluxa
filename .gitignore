@@ -56,3 +56,6 @@ data/
 
 # Claude Code session files
 .claude/
+
+# Understand Anything generated knowledge graph
+.understand-anything/

@@ -4,6 +4,16 @@ All significant changes, in reverse chronological order.
 
 ---
 
+## [Unreleased]
+
+### Added
+- `docs/PORTFOLIO_NARRATIVE.md` — strategic plan for the fintech infrastructure trifecta (`fluxa` + `bankops-portal` + `fluxguard`). Includes existing-asset inventory, 8-step build sequence with time-boxes, pre-written resume bullets with bracketed measurement targets, honest tradeoffs, and stop conditions. Also captures the `bankops-portal/backend/src` audit result (verdict: production-shape — Spring Boot 3.2, optimistic-lock retry on withdrawals, real concurrency tests via `CountDownLatch`/`ExecutorService`, 12 test classes including resilience and idempotency suites). Integration plan for step 2 (Fluxa gRPC fraud-eval called from `TransactionService`) confirmed additive — no rewrites required.
+
+### Changed
+- `docs/plan.md` "Next" section reframed: trifecta is now the major initiative, with tactical items (README badges, demo GIF) reclassified as smaller-scope follow-ons that hold regardless of the trifecta path.
+
+---
+
 ## 2026-04-15 — IEEE-CIS Replay Integration + Grafana Fix
 
 **Commits:** `cb5052a` (replay mapper), this commit (rules + dashboard + velocity fix)
