@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. Read `docs/plan.md` — current status, In Progress, Next.
 2. Read `docs/changelog.md` — what changed and why.
+3. For trifecta context (cross-repo plan, build sequence, resume bullets), read `docs/PORTFOLIO_NARRATIVE.md`.
 
 After any significant change, move completed items in `docs/plan.md` and add an entry to `docs/changelog.md` (under `[Unreleased]` or a new dated section).
 
@@ -19,10 +20,12 @@ make down      # docker compose down (also tears down the replay profile)
 make replay    # docker compose --profile replay up -d replay  (requires ./data/transactions.csv — IEEE-CIS train_transaction.csv renamed)
 make logs      # follow logs for all services
 make ps        # container status
-make test      # go test -v -race ./...   (DB-touching tests require `make up` first — no DB mocks)
+make test      # go test -v -race ./...   (tests skip silently without TEST_DB_DSN)
 make lint      # golangci-lint run ./...
 make clean     # docker compose down -v + remove coverage artifacts
 ```
+
+DB integration tests skip silently when `TEST_DB_DSN` is unset. To run them: `make up`, then `TEST_DB_DSN=postgres://fluxa_user:fluxa_password@localhost:5432/fluxa?sslmode=disable make test`.
 
 Run a single Go test:
 
@@ -71,3 +74,10 @@ Fluxa is a local fraud-detection pipeline. The flow is: **CSV replay → ingest 
 - **Commits**: no `Co-authored-by` lines.
 - Do not add docstrings, comments, or type annotations to code that wasn't changed.
 - Do not add error handling for scenarios that cannot happen; trust framework guarantees.
+
+## Definition of Done
+
+- Integration tests pass — run the invocation given in the "DB integration tests skip silently" note above and confirm the output contains zero `--- SKIP:` lines. A bare `make test` does NOT satisfy this — integration tests silently skip without `TEST_DB_DSN`.
+- `golangci-lint run ./...` is clean.
+- `gofmt -l .` is empty.
+- `docs/plan.md` + `docs/changelog.md` updated.
