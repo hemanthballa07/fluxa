@@ -13,6 +13,9 @@ type Metrics struct {
 }
 
 // NewMetrics creates and registers all Fluxa metrics for the given service.
+// Not idempotent: calls prometheus.MustRegister on the global default registry,
+// so a second call in the same process panics. Production services call it once
+// per binary; tests must share an instance per package.
 func NewMetrics(service string) *Metrics {
 	counters := map[string]*prometheus.CounterVec{
 		"events_ingested_total": prometheus.NewCounterVec(
@@ -35,6 +38,10 @@ func NewMetrics(service string) *Metrics {
 			prometheus.CounterOpts{Name: "alerts_consumed_total", Help: "Total alerts received by alert-consumer"},
 			[]string{},
 		),
+		"fraud_flags_grpc_total": prometheus.NewCounterVec(
+			prometheus.CounterOpts{Name: "fraud_flags_grpc_total", Help: "Total fraud rule fires via the synchronous gRPC surface"},
+			[]string{"rule"},
+		),
 	}
 
 	histograms := map[string]*prometheus.HistogramVec{
@@ -44,6 +51,10 @@ func NewMetrics(service string) *Metrics {
 		),
 		"process_latency_seconds": prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{Name: "process_latency_seconds", Help: "Per-message processor latency", Buckets: latencyBuckets},
+			[]string{"service"},
+		),
+		"fraud_eval_latency_seconds": prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{Name: "fraud_eval_latency_seconds", Help: "End-to-end gRPC fraud evaluation latency", Buckets: latencyBuckets},
 			[]string{"service"},
 		),
 	}

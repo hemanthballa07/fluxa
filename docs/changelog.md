@@ -7,10 +7,31 @@ All significant changes, in reverse chronological order.
 ## [Unreleased]
 
 ### Added
+- **Trifecta Step 2 — bankops-portal now calls Fluxa fraud-eval (2026-05-27).** Implementation lives in the separate `bankops-portal` repo; this changelog tracks the cross-cutting integration. Highlights:
+  - Proto vendored into `bankops-portal/backend/src/main/proto/fraud/v1/`; `protobuf-maven-plugin` generates Java stubs at `com.fluxa.fraud.v1.*` (gRPC 1.68.1, protobuf 3.25.5).
+  - New `com.bankops.portal.client.fluxa` package: sealed `FluxaEvalOutcome` (6 variants), `FluxaFraudClient`, `FluxaClientConfiguration`, `FluxaUnavailableException`, `FraudFlagDto`.
+  - `TransactionService` rewired so the Fluxa eval lifts above the optimistic-lock retry (one event per logical transaction); balance mutation reorders after transaction save so the FLAG branch leaves no dirty `Account` entity.
+  - FLAG → `Transaction.TransactionStatus.HELD` (new enum value) + auto-created HIGH-severity `SupportCase` with P1 SLA override (the existing `CaseService.createCase` hardcodes P2).
+  - UNAVAILABLE/DEADLINE_EXCEEDED routed through directional FAIL_OPEN/FAIL_CLOSED policy; `FluxaUnavailableException` → HTTP 503 via `GlobalExceptionHandler`.
+  - 12 new tests green: `FluxaFraudClientTest` (Mockito 6), `FraudGateIntegrationTest` (in-process gRPC 5), `ShadowModeFraudGateIntegrationTest` (separate `shadow-mode=true` context 1).
+  - Cross-repo proto sync script `bankops-portal/scripts/sync-proto.sh` (developer-only).
+- **Synchronous gRPC fraud-eval surface** (`fraud-grpc` service): new Go service at `:9095` (metrics `:9096`) implementing `fluxa.fraud.v1.FraudEval/EvaluateTransaction`. Reuses the existing `fraud.Engine` + `db.Client` against the committed proto contract in `proto/fraud/v1/fraud_eval.proto`. Step 1 of the trifecta build sequence.
+  - New package `internal/fraudeval/` (server impl + bufconn-backed integration tests covering Allow, three single-rule FLAG paths, MultipleFlags, idempotent re-insert, four `InvalidArgument` paths, latency-reported, and a no-DB proto↔domain unit test).
+  - New entrypoint `services/fraud-grpc/main.go` + `services/fraud-grpc/Dockerfile`; gRPC reflection registered (plaintext-only, localhost; no TLS in Step 1 per `docs/specs/integration-bankops-fluxa.md`); SIGINT/SIGTERM → `GracefulStop` with 10s force-stop fallback.
+  - Generated stubs `internal/grpc/fraud/v1/fraud_eval.pb.go` + `fraud_eval_grpc.pb.go` checked in (so downstream consumers don't need `protoc`).
+  - New Prometheus metrics: histogram `fraud_eval_latency_seconds{service}` + counter `fraud_flags_grpc_total{rule}` (separate from the async pipeline's `fraud_flags_total` to avoid breaking existing registrations).
+  - New `docker-compose.yml` block `fraud-grpc` (depends only on `postgres`; mounts `rules.yaml`); new Prometheus scrape job `fluxa-fraud-grpc` targeting `fraud-grpc:9096`.
+  - New `Makefile` targets: `proto-tools` (installs `protoc-gen-go@v1.35.2` + `protoc-gen-go-grpc@v1.5.1`, both pinned to versions compatible with Go 1.22), `grpc-tools` (macOS Homebrew install of `grpcurl`), `proto` (codegen, guarded), `k6-fraud` (runs the SLO script).
+  - New k6 script `scripts/k6/fraud_grpc_p99.js`: 500 RPS for 30s with a `p(99)<50` threshold gate.
 - `docs/PORTFOLIO_NARRATIVE.md` — strategic plan for the fintech infrastructure trifecta (`fluxa` + `bankops-portal` + `fluxguard`). Includes existing-asset inventory, 8-step build sequence with time-boxes, pre-written resume bullets with bracketed measurement targets, honest tradeoffs, and stop conditions. Also captures the `bankops-portal/backend/src` audit result (verdict: production-shape — Spring Boot 3.2, optimistic-lock retry on withdrawals, real concurrency tests via `CountDownLatch`/`ExecutorService`, 12 test classes including resilience and idempotency suites). Integration plan for step 2 (Fluxa gRPC fraud-eval called from `TransactionService`) confirmed additive — no rewrites required.
 
 ### Changed
+- `go.mod`: added direct deps `google.golang.org/grpc v1.69.4` (last release supporting Go 1.22) and promoted `google.golang.org/protobuf` from indirect → direct.
+- `internal/adapters/prometheus/metrics.go`: registered the two new metrics above.
+- Divergence from `docs/specs/integration-bankops-fluxa.md`: toolchain is `protoc` direct, not `buf` — single `.proto`, single Go consumer, no breaking-change CI needed.
 - `docs/plan.md` "Next" section reframed: trifecta is now the major initiative, with tactical items (README badges, demo GIF) reclassified as smaller-scope follow-ons that hold regardless of the trifecta path.
+- `internal/adapters/prometheus/metrics.go`: documented `NewMetrics` as non-idempotent on the global default Prometheus registry (calling twice in one process panics).
+- `internal/fraudeval/server_test.go`: shared `Metrics` instance via `sync.Once` helper so package tests stay collision-free.
 
 ---
 

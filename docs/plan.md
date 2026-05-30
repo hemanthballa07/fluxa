@@ -1,6 +1,6 @@
 # Fluxa — Project Status Tracker
 
-_Last updated: 2026-04-15_
+_Last updated: 2026-05-27 (Step 2 complete)_
 
 ---
 
@@ -96,11 +96,37 @@ Prometheus :9090   Grafana :3000
 
 ---
 
+### Trifecta Step 1 — Synchronous gRPC Fraud-Eval Surface (2026-05-29, DoD passed)
+- [x] `protoc-gen-go` + `protoc-gen-go-grpc` toolchain wired (`make proto-tools` / `make proto`)
+- [x] Generated Go stubs at `internal/grpc/fraud/v1/`
+- [x] Server impl `internal/fraudeval/server.go` (proto↔domain, status-code mapping, logging interceptor)
+- [x] Entrypoint `services/fraud-grpc/main.go` + `Dockerfile` (gRPC reflection, graceful shutdown)
+- [x] `docker-compose.yml` + `prometheus.yml` updated for new service
+- [x] Integration tests `internal/fraudeval/server_test.go` (bufconn, 11 test functions; DB-backed tests skip cleanly without `TEST_DB_DSN`)
+- [x] k6 SLO script `scripts/k6/fraud_grpc_p99.js` (500 RPS, p99 < 50ms threshold)
+- [x] Static checks pass: `gofmt -l .` empty, `golangci-lint run ./...` clean, `go build ./...` clean
+- [x] **DoD gate passed (2026-05-29)**: 39 tests, 0 skips, 0 fails; `grpcurl` ALLOW + FLAG verified against `rules.yaml` (`amount_threshold=500`); `make k6-fraud` p99=25.79ms @ 500 RPS (gate <50ms)
+
+### Trifecta Step 2 — bankops-portal calls Fluxa fraud-eval (2026-05-27)
+
+Implementation lives in the separate `bankops-portal` repo (see its `STATUS.md` and new `CLAUDE.md` for the full artefact list). Highlights:
+
+- [x] Proto vendored into `bankops-portal/backend/src/main/proto/fraud/v1/`; `protobuf-maven-plugin` + `os-maven-plugin` generate `com.fluxa.fraud.v1.*` stubs (gRPC 1.68.1, protobuf 3.25.5)
+- [x] New `com.bankops.portal.client.fluxa` package — sealed `FluxaEvalOutcome` (6 variants), `FluxaFraudClient`, `FluxaClientConfiguration`, `FluxaUnavailableException`, `FraudFlagDto`
+- [x] `FluxaProperties` config (`bankops.fluxa.*`); profile overlays `application-{local,test,prod}.yaml` with directional FAIL_OPEN/FAIL_CLOSED policy
+- [x] `Transaction.TransactionStatus.HELD` added; `CaseService.createForFraud` builds HIGH-severity P1 case
+- [x] `TransactionService.{withdrawWithOptimisticRetry, withdrawOnce, createDeposit}` rewired: idempotency pre-check + Fluxa eval lifted above optimistic-lock retry; balance mutation reordered after tx-save on withdraw; `dispatchFluxaOutcome` handles all six outcomes
+- [x] `TransactionController` returns 202 for HELD; `GlobalExceptionHandler` maps `FluxaUnavailableException` → 503
+- [x] Tests green: `FluxaFraudClientTest` 6/6 (Mockito), `FraudGateIntegrationTest` 5/5 (`@SpringBootTest` + in-process gRPC), `ShadowModeFraudGateIntegrationTest` 1/1 (separate context with `shadow-mode=true`)
+- [x] Fixed pre-existing `AuditEventService.recordEvent` propagation MANDATORY → REQUIRED (unblocked the legacy `TransactionIntegrationTest` as a side-effect)
+- [x] `bankops-portal/CLAUDE.md` written from scratch (integration entrypoint, DoD, reliability invariants)
+- [ ] Manual demo (requires fluxa stack up): `curl -X POST localhost:8080/api/accounts/1/transactions … {"type":"DEPOSIT","amount":99999,…}` → expect 202 + HELD + HIGH-severity SupportCase
+
 ## Next
 
-The next major initiative is the **fintech infrastructure trifecta** — integrating `fluxa` with `bankops-portal` (bank backend) and `fluxguard` (rate limiter) under a single Next.js + TS ops console. Full plan, build sequence, resume bullets, and `bankops-portal` audit results in **[`docs/PORTFOLIO_NARRATIVE.md`](PORTFOLIO_NARRATIVE.md)**.
+After Step 2 the **fintech infrastructure trifecta** continues with **Step 3**: frontend HELD badge + ops-action UI + HELD → RELEASED/REJECTED state-machine transitions. Full sequence in **[`docs/PORTFOLIO_NARRATIVE.md`](PORTFOLIO_NARRATIVE.md)**.
 
-- [ ] **Step 2 prep**: write `CLAUDE.md` in `bankops-portal` with integration entrypoint (`TransactionService`), idempotency invariants, and pointer back to `fluxa/docs/PORTFOLIO_NARRATIVE.md`. Defer until step 2 actually starts; do not write from fluxa now.
+Open Questions deferred from Step 2 plan: (a) should `CreateTransactionRequest` gain a `merchant` field so Fluxa's `blocked_merchant` rule can fire? (b) Should shadow-mode swallow `InvalidArgument` (current) or surface 400 even in observer mode?
 
 Tactical, smaller items that remain valid regardless of the trifecta path:
 - [ ] **README badges** — build status, Go version, license badges

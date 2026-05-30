@@ -1,4 +1,4 @@
-.PHONY: help up down build logs test lint clean replay ps
+.PHONY: help up down build logs test lint clean replay ps proto proto-tools grpc-tools k6-fraud
 
 # Default target
 help:
@@ -76,3 +76,25 @@ lint:
 clean:
 	docker compose --profile replay down -v
 	rm -f coverage.out coverage.html
+
+# Install protoc Go plugins (one-time setup before `make proto`).
+# Versions pinned for Go 1.22 compatibility — protoc-gen-go@latest currently
+# requires Go 1.23. Bump these when go.mod moves to 1.23+.
+proto-tools:
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.35.2
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+
+# Install grpcurl for ad-hoc gRPC smoke testing (macOS via Homebrew; idempotent)
+grpc-tools:
+	@command -v grpcurl >/dev/null || brew install grpcurl
+
+# Generate Go stubs from proto files (requires `make proto-tools` first)
+proto:
+	@command -v protoc-gen-go-grpc >/dev/null || (echo 'run `make proto-tools` first' && exit 1)
+	protoc --go_out=. --go_opt=module=github.com/fluxa/fluxa \
+	       --go-grpc_out=. --go-grpc_opt=module=github.com/fluxa/fluxa \
+	       proto/fraud/v1/fraud_eval.proto
+
+# Run k6 SLO check against fraud-grpc (requires service up via `make up`)
+k6-fraud:
+	k6 run scripts/k6/fraud_grpc_p99.js
