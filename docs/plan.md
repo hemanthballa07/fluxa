@@ -126,15 +126,19 @@ Implementation lives in the separate `bankops-portal` repo (see its `STATUS.md` 
 
 Full chain proven: `bankops POST(99999) → Fluxa gRPC (26ms, OK) → HELD → P1 SupportCase`. All four bugs were bankops-side; Fluxa needed zero changes. See memory for details.
 
-### Trifecta Step 4 (Console) — SSE fraud feed (2026-05-31, IN PROGRESS)
+### Trifecta Step 4 (Console) — SSE fraud feed + ops console (2026-05-31, e2e CLOSED)
 
 - [x] `domain.FraudEvent` — joined view of `fraud_flags` + `events`
 - [x] `db.GetRecentFraudEvents(limit)` — replay on connect (DESC order, newest first)
 - [x] `db.GetFraudEventsSince(since)` — 2s poll for new events (ASC order)
 - [x] `GET /fraud-events` SSE handler in query service (`:8083`) — CORS enabled, `?limit=N` (default 50, max 500), replays history then polls
-- [ ] Integration test for the new DB methods
-- [ ] `trifecta-console` Next.js repo scaffold
-- [ ] Fraud Feed tab wired to `GET :8083/fraud-events`
+- [x] Integration tests for the new DB methods (6 tests, see `d5240eb`)
+- [x] `trifecta-console` Next.js repo scaffold (separate repo; 5 screens incl. Fraud Review Center)
+- [x] Fraud Feed tab wired to `GET :8083/fraud-events`
+
+**e2e CLOSED (2026-05-31):** full console chain proven against a live HELD txn —
+`bankops POST(47500) → Fluxa gRPC FLAG (24ms) → 202/HELD → P1 SupportCase → SSE feed (matching correlation_id) → console release (CORS, Origin :3001) → RELEASED`.
+Three bankops-side blockers surfaced and fixed in the `bankops-portal` repo (Fluxa needed zero changes): security `PathPattern` 500 on `/accounts/**` (mid-`**` illegal in Spring `PathPattern`), missing CORS for the `:3001` console origin, and no local seed data (in-memory H2 wiped account 1 on every restart → added `@Profile("local")` `LocalDataSeeder`).
 
 ## Next
 

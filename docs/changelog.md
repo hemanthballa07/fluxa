@@ -12,6 +12,9 @@ All significant changes, in reverse chronological order.
 - `db.GetFraudEventsSince(since time.Time)` — returns fraud events with `flagged_at > since` (ASC order) for incremental polling.
 - `GET /fraud-events` SSE endpoint on the query service (`:8083`): replays last N events on connect, then polls every 2s for new flags. CORS enabled (`*`), `?limit=N` param (default 50, max 500), `X-Accel-Buffering: no` for nginx compatibility.
 
+### Verified (2026-05-31 — Trifecta Step 4 console e2e CLOSED)
+- Full ops-console chain proven end-to-end against a live HELD transaction: `bankops POST → Fluxa gRPC FLAG → 202/HELD → P1 SupportCase → SSE fraud feed (matching correlation_id) → console release under CORS → RELEASED`. Fluxa needed no changes; three bankops-side blockers were fixed in the `bankops-portal` repo: security `PathPattern` 500 on `/accounts/**`, missing CORS for the `:3001` console origin, and no local seed data (added a `@Profile("local")` seeder so account 1 survives restarts).
+
 ### Added
 - **Trifecta Step 2 — bankops-portal now calls Fluxa fraud-eval (2026-05-27).** Implementation lives in the separate `bankops-portal` repo; this changelog tracks the cross-cutting integration. Highlights:
   - Proto vendored into `bankops-portal/backend/src/main/proto/fraud/v1/`; `protobuf-maven-plugin` generates Java stubs at `com.fluxa.fraud.v1.*` (gRPC 1.68.1, protobuf 3.25.5).
