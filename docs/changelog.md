@@ -6,6 +6,12 @@ All significant changes, in reverse chronological order.
 
 ## [Unreleased]
 
+### Added (2026-05-31 — Trifecta Step 4, SSE fraud feed)
+- `domain.FraudEvent` — new type joining `fraud_flags` + `events` for the SSE wire format (flag_id, event_id, user_id, amount, currency, merchant, rule_name, rule_value, flagged_at).
+- `db.GetRecentFraudEvents(limit int)` — returns the `limit` most recent fraud events (JOIN fraud_flags + events, DESC order) for cold-load replay on SSE connect.
+- `db.GetFraudEventsSince(since time.Time)` — returns fraud events with `flagged_at > since` (ASC order) for incremental polling.
+- `GET /fraud-events` SSE endpoint on the query service (`:8083`): replays last N events on connect, then polls every 2s for new flags. CORS enabled (`*`), `?limit=N` param (default 50, max 500), `X-Accel-Buffering: no` for nginx compatibility.
+
 ### Added
 - **Trifecta Step 2 — bankops-portal now calls Fluxa fraud-eval (2026-05-27).** Implementation lives in the separate `bankops-portal` repo; this changelog tracks the cross-cutting integration. Highlights:
   - Proto vendored into `bankops-portal/backend/src/main/proto/fraud/v1/`; `protobuf-maven-plugin` generates Java stubs at `com.fluxa.fraud.v1.*` (gRPC 1.68.1, protobuf 3.25.5).

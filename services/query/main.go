@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	prommetrics "github.com/fluxa/fluxa/internal/adapters/prometheus"
 	"github.com/fluxa/fluxa/internal/config"
 	"github.com/fluxa/fluxa/internal/db"
+	"github.com/fluxa/fluxa/internal/domain"
 	"github.com/fluxa/fluxa/internal/logging"
 	"github.com/fluxa/fluxa/internal/ports"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -51,6 +54,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events/", handleGetEvent)
+	mux.HandleFunc("/fraud-events", handleFraudEvents)
 	mux.HandleFunc("/health", handleHealth)
 
 	logger.Info("Query service starting", map[string]interface{}{"port": 8083})
@@ -64,6 +68,94 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func handleFraudEvents(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Correlation-ID")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, `{"error":"streaming not supported"}`, http.StatusInternalServerError)
+		return
+	}
+
+	limit := 50
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if n, err := strconv.Atoi(lStr); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	recent, err := dbClient.GetRecentFraudEvents(limit)
+	if err != nil {
+		logger.Error("Failed to get recent fraud events", err)
+		return
+	}
+
+	var lastSeen time.Time
+	if len(recent) > 0 {
+		lastSeen = recent[0].FlaggedAt // recent[0] is newest (DESC order)
+		for i := len(recent) - 1; i >= 0; i-- {
+			if err := writeSSEEvent(w, recent[i]); err != nil {
+				return
+			}
+		}
+	} else {
+		lastSeen = time.Now().UTC()
+	}
+	flusher.Flush()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			fresh, err := dbClient.GetFraudEventsSince(lastSeen)
+			if err != nil {
+				logger.Error("Failed to poll fraud events", err)
+				continue
+			}
+			for _, fe := range fresh {
+				if err := writeSSEEvent(w, fe); err != nil {
+					return
+				}
+				if fe.FlaggedAt.After(lastSeen) {
+					lastSeen = fe.FlaggedAt
+				}
+			}
+			if len(fresh) > 0 {
+				flusher.Flush()
+			}
+		}
+	}
+}
+
+func writeSSEEvent(w http.ResponseWriter, fe *domain.FraudEvent) error {
+	data, err := json.Marshal(fe)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "data: %s\n\n", data)
+	return err
 }
 
 func handleGetEvent(w http.ResponseWriter, r *http.Request) {

@@ -122,9 +122,23 @@ Implementation lives in the separate `bankops-portal` repo (see its `STATUS.md` 
 - [x] `bankops-portal/CLAUDE.md` written from scratch (integration entrypoint, DoD, reliability invariants)
 - [ ] Manual demo (requires fluxa stack up): `curl -X POST localhost:8080/api/accounts/1/transactions … {"type":"DEPOSIT","amount":99999,…}` → expect 202 + HELD + HIGH-severity SupportCase
 
+### Trifecta Step A — e2e verification (2026-05-30, CLOSED)
+
+Full chain proven: `bankops POST(99999) → Fluxa gRPC (26ms, OK) → HELD → P1 SupportCase`. All four bugs were bankops-side; Fluxa needed zero changes. See memory for details.
+
+### Trifecta Step 4 (Console) — SSE fraud feed (2026-05-31, IN PROGRESS)
+
+- [x] `domain.FraudEvent` — joined view of `fraud_flags` + `events`
+- [x] `db.GetRecentFraudEvents(limit)` — replay on connect (DESC order, newest first)
+- [x] `db.GetFraudEventsSince(since)` — 2s poll for new events (ASC order)
+- [x] `GET /fraud-events` SSE handler in query service (`:8083`) — CORS enabled, `?limit=N` (default 50, max 500), replays history then polls
+- [ ] Integration test for the new DB methods
+- [ ] `trifecta-console` Next.js repo scaffold
+- [ ] Fraud Feed tab wired to `GET :8083/fraud-events`
+
 ## Next
 
-After Step 2 the **fintech infrastructure trifecta** continues with **Step 3**: frontend HELD badge + ops-action UI + HELD → RELEASED/REJECTED state-machine transitions. Full sequence in **[`docs/PORTFOLIO_NARRATIVE.md`](PORTFOLIO_NARRATIVE.md)**.
+Decision agreed with bankops (2026-05-31): **Option B — new `trifecta-console` Next.js standalone repo** covering fraud feed (SSE from Fluxa), bank ops actions (REST → bankops), rate-limit telemetry (Prometheus → fluxguard). ~5-6 screens, ~1 week target. Step 5 (ML scorer) planning parallel, no implementation until console MVP is demoed.
 
 Open Questions deferred from Step 2 plan: (a) should `CreateTransactionRequest` gain a `merchant` field so Fluxa's `blocked_merchant` rule can fire? (b) Should shadow-mode swallow `InvalidArgument` (current) or surface 400 even in observer mode?
 
