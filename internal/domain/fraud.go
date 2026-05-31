@@ -21,3 +21,17 @@ type AlertMessage struct {
 	RuleValue string    `json:"rule_value"`
 	FlaggedAt time.Time `json:"flagged_at"`
 }
+
+// FraudEvent is a joined view of fraud_flags + events, used by the SSE stream.
+type FraudEvent struct {
+	FlagID        string    `json:"flag_id"`
+	EventID       string    `json:"event_id"`
+	CorrelationID string    `json:"correlation_id"`
+	UserID        string    `json:"user_id"`
+	Amount        float64   `json:"amount"`
+	Currency      string    `json:"currency"`
+	Merchant      string    `json:"merchant"`
+	RuleName      string    `json:"rule_name"`
+	RuleValue     string    `json:"rule_value"`
+	FlaggedAt     time.Time `json:"flagged_at"`
+}

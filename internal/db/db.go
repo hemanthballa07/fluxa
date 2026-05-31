@@ -169,6 +169,76 @@ func (c *Client) InsertFraudFlag(flag *domain.FraudFlag) error {
 	return nil
 }
 
+// GetRecentFraudEvents returns the most recent fraud flags joined with event data, newest first.
+// Used to replay history on SSE connect.
+func (c *Client) GetRecentFraudEvents(limit int) ([]*domain.FraudEvent, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `
+		SELECT ff.flag_id, ff.event_id, e.correlation_id, ff.user_id, e.amount, e.currency, e.merchant,
+		       ff.rule_name, ff.rule_value, ff.flagged_at
+		FROM fraud_flags ff
+		JOIN events e ON ff.event_id = e.event_id
+		ORDER BY ff.flagged_at DESC
+		LIMIT $1
+	`
+
+	rows, err := c.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent fraud events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*domain.FraudEvent
+	for rows.Next() {
+		fe := &domain.FraudEvent{}
+		if err := rows.Scan(
+			&fe.FlagID, &fe.EventID, &fe.CorrelationID, &fe.UserID, &fe.Amount, &fe.Currency, &fe.Merchant,
+			&fe.RuleName, &fe.RuleValue, &fe.FlaggedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan fraud event: %w", err)
+		}
+		events = append(events, fe)
+	}
+	return events, rows.Err()
+}
+
+// GetFraudEventsSince returns fraud flags with flagged_at strictly after since, oldest first.
+// Used to poll for new events in the SSE loop.
+func (c *Client) GetFraudEventsSince(since time.Time) ([]*domain.FraudEvent, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `
+		SELECT ff.flag_id, ff.event_id, e.correlation_id, ff.user_id, e.amount, e.currency, e.merchant,
+		       ff.rule_name, ff.rule_value, ff.flagged_at
+		FROM fraud_flags ff
+		JOIN events e ON ff.event_id = e.event_id
+		WHERE ff.flagged_at > $1
+		ORDER BY ff.flagged_at ASC
+	`
+
+	rows, err := c.db.QueryContext(ctx, query, since)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query fraud events since %v: %w", since, err)
+	}
+	defer rows.Close()
+
+	var events []*domain.FraudEvent
+	for rows.Next() {
+		fe := &domain.FraudEvent{}
+		if err := rows.Scan(
+			&fe.FlagID, &fe.EventID, &fe.CorrelationID, &fe.UserID, &fe.Amount, &fe.Currency, &fe.Merchant,
+			&fe.RuleName, &fe.RuleValue, &fe.FlaggedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan fraud event: %w", err)
+		}
+		events = append(events, fe)
+	}
+	return events, rows.Err()
+}
+
 // CountRecentEvents returns the number of events for a user within the last windowSeconds seconds.
 // Used by the fraud engine for velocity checks.
 func (c *Client) CountRecentEvents(userID string, windowSeconds int) (int, error) {
