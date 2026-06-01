@@ -8,6 +8,7 @@ import (
 
 	scorerv1 "github.com/fluxa/fluxa/internal/grpc/scorer/v1"
 	"github.com/fluxa/fluxa/internal/mlfeatures"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -21,7 +22,10 @@ type Client struct {
 
 // NewClient dials endpoint (e.g. "ml-scorer:9097") lazily. timeout bounds each Score call.
 func NewClient(endpoint string, timeout time.Duration) (*Client, error) {
-	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(endpoint,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
 		return nil, err
 	}
