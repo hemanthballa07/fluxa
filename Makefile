@@ -94,6 +94,9 @@ proto:
 	protoc --go_out=. --go_opt=module=github.com/fluxa/fluxa \
 	       --go-grpc_out=. --go-grpc_opt=module=github.com/fluxa/fluxa \
 	       proto/fraud/v1/fraud_eval.proto
+	protoc --go_out=. --go_opt=module=github.com/fluxa/fluxa \
+	       --go-grpc_out=. --go-grpc_opt=module=github.com/fluxa/fluxa \
+	       proto/scorer/v1/scorer.proto
 
 # Run k6 SLO check against fraud-grpc (requires service up via `make up`)
 k6-fraud:

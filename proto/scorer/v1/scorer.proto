@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package fluxa.scorer.v1;
+
+option go_package = "github.com/fluxa/fluxa/internal/grpc/scorer/v1;scorerv1";
+
+// Scorer serves the ONNX fraud model. Called by fraud.Engine after rules,
+// best-effort (fail-open): any error/timeout falls back to rules-only.
+service Scorer {
+  rpc Score(ScoreRequest) returns (ScoreResponse);
+}
+
+// ScoreRequest carries the raw (pre-encoding) features in mlfeatures.Header() order.
+// The scorer applies the encoder (encoder.json) to produce the model input vector.
+message ScoreRequest {
+  double amount = 1;
+  int32 velocity_60s = 2;
+  int32 velocity_3600s = 3;
+  int32 velocity_86400s = 4;
+  double secs_since_prev = 5;
+  double user_amt_sum_3600s = 6;
+  double user_amt_max_3600s = 7;
+  string currency = 8;
+  string product_code = 9;
+  string card_network = 10;
+  string merchant = 11;
+  string email_domain = 12;
+}
+
+message ScoreResponse {
+  // ml_score is the model's fraud probability in [0,1].
+  double ml_score = 1;
+  // model_version identifies the artifact (e.g. "v1"); "unavailable" never appears
+  // here — fail-open is handled caller-side in the engine.
+  string model_version = 2;
+}
