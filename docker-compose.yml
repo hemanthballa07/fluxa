@@ -177,6 +177,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  ml-scorer:
+    build:
+      context: .
+      dockerfile: services/ml-scorer/Dockerfile
+    container_name: fluxa-ml-scorer
+    ports:
+      - "9097:9097"
+      - "9098:9098"
+    restart: unless-stopped
+
   query:
     build:
       context: .

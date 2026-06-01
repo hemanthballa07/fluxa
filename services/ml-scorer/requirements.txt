@@ -1,0 +1,5 @@
+grpcio==1.68.*
+grpcio-tools==1.68.*
+onnxruntime
+numpy
+prometheus-client
