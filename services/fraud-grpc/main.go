@@ -19,7 +19,9 @@ import (
 	"github.com/fluxa/fluxa/internal/fraudeval"
 	fraudv1 "github.com/fluxa/fluxa/internal/grpc/fraud/v1"
 	"github.com/fluxa/fluxa/internal/logging"
+	"github.com/fluxa/fluxa/internal/observability"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -38,6 +40,8 @@ func main() {
 	}
 
 	logger := logging.NewLogger("fraud-grpc", "init")
+
+	shutdownTracing := observability.Init("fraud-grpc")
 
 	dbClient, err := db.NewClient(cfg.DSN(), 10)
 	if err != nil {
@@ -92,6 +96,7 @@ func main() {
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxConcurrentStreams(100),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.UnaryInterceptor(fraudeval.LoggingInterceptor(logger)),
 	)
 	fraudv1.RegisterFraudEvalServer(grpcServer, srv)
@@ -120,5 +125,11 @@ func main() {
 	if err := grpcServer.Serve(lis); err != nil {
 		fmt.Fprintf(os.Stderr, "gRPC serve error: %v\n", err)
 		os.Exit(1)
+	}
+	// Serve returns after GracefulStop drains; flush remaining spans before exit.
+	flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := shutdownTracing(flushCtx); err != nil {
+		logger.Warn("tracing shutdown error", map[string]interface{}{"error": err.Error()})
 	}
 }
