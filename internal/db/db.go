@@ -259,3 +259,45 @@ func (c *Client) CountRecentEvents(userID string, windowSeconds int) (int, error
 	}
 	return count, nil
 }
+
+// CountUserEventsAsOf counts the user's events with ts in (asOf-window, asOf].
+// Transaction-time, point-in-time aggregate for the ML feature builder — reproducible
+// offline and online (unlike CountRecentEvents which keys on created_at/NOW()).
+func (c *Client) CountUserEventsAsOf(userID string, asOf time.Time, windowSeconds int) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var n int
+	err := c.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM events
+		 WHERE user_id = $1 AND ts <= $2 AND ts > $2 - ($3 * INTERVAL '1 second')`,
+		userID, asOf, windowSeconds).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count user events as-of: %w", err)
+	}
+	return n, nil
+}
+
+// UserAmountStatsAsOf returns the sum and max amount over the window ending at asOf,
+// plus the ts of the user's most recent event strictly before asOf (zero time if none).
+func (c *Client) UserAmountStatsAsOf(userID string, asOf time.Time, windowSeconds int) (sum, max float64, prevTs time.Time, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err = c.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(amount),0), COALESCE(MAX(amount),0)
+		 FROM events
+		 WHERE user_id = $1 AND ts <= $2 AND ts > $2 - ($3 * INTERVAL '1 second')`,
+		userID, asOf, windowSeconds).Scan(&sum, &max)
+	if err != nil {
+		return 0, 0, time.Time{}, fmt.Errorf("failed to compute user amount stats: %w", err)
+	}
+	var pt sql.NullTime
+	if err = c.db.QueryRowContext(ctx,
+		`SELECT MAX(ts) FROM events WHERE user_id = $1 AND ts < $2`,
+		userID, asOf).Scan(&pt); err != nil {
+		return 0, 0, time.Time{}, fmt.Errorf("failed to fetch prev event ts: %w", err)
+	}
+	if pt.Valid {
+		prevTs = pt.Time
+	}
+	return sum, max, prevTs, nil
+}

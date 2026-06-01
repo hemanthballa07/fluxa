@@ -247,3 +247,68 @@ func TestGetFraudEventsSince_EmptyWhenNoneNewer(t *testing.T) {
 		t.Errorf("Expected 0 events for future since, got %d", len(events))
 	}
 }
+
+// seedEventTS inserts a labeled event with a controllable user_id + ts for the
+// ML feature point-in-time aggregate tests (Task 2/3).
+func seedEventTS(t *testing.T, c *Client, idSuffix, userID string, amount float64, ts time.Time) {
+	t.Helper()
+	ev := &domain.Event{
+		EventID:   "mlfeat-" + idSuffix,
+		UserID:    userID,
+		Amount:    amount,
+		Currency:  "USD",
+		Merchant:  "TestMerchant",
+		Timestamp: ts,
+		Metadata:  map[string]interface{}{"is_fraud_ground_truth": "0"},
+	}
+	if err := c.InsertEvent(ev, "corr-mlfeat-"+idSuffix, domain.PayloadModeInline, nil); err != nil {
+		t.Fatalf("seedEventTS InsertEvent: %v", err)
+	}
+}
+
+func TestCountUserEventsAsOf(t *testing.T) {
+	c := getTestDB(t)
+	defer c.Close()
+	base := time.Now().UTC().Truncate(time.Second)
+	u := fmt.Sprintf("mlfeat-cnt-%d", base.UnixNano())
+	seedEventTS(t, c, "c1-"+u, u, 10.0, base)
+	seedEventTS(t, c, "c2-"+u, u, 20.0, base.Add(30*time.Second))
+	seedEventTS(t, c, "c3-"+u, u, 30.0, base.Add(90*time.Second))
+
+	// window=100s as-of base+90s => ts > base-10s => all three.
+	if n, err := c.CountUserEventsAsOf(u, base.Add(90*time.Second), 100); err != nil {
+		t.Fatalf("CountUserEventsAsOf(100): %v", err)
+	} else if n != 3 {
+		t.Errorf("window=100: expected 3, got %d", n)
+	}
+	// window=50s as-of base+90s => ts > base+40s => only c3.
+	if n, err := c.CountUserEventsAsOf(u, base.Add(90*time.Second), 50); err != nil {
+		t.Fatalf("CountUserEventsAsOf(50): %v", err)
+	} else if n != 1 {
+		t.Errorf("window=50: expected 1, got %d", n)
+	}
+}
+
+func TestUserAmountStatsAsOf(t *testing.T) {
+	c := getTestDB(t)
+	defer c.Close()
+	base := time.Now().UTC().Truncate(time.Second)
+	u := fmt.Sprintf("mlfeat-amt-%d", base.UnixNano())
+	seedEventTS(t, c, "a1-"+u, u, 100.0, base)
+	seedEventTS(t, c, "a2-"+u, u, 300.0, base.Add(10*time.Second))
+
+	sum, max, prevTs, err := c.UserAmountStatsAsOf(u, base.Add(10*time.Second), 3600)
+	if err != nil {
+		t.Fatalf("UserAmountStatsAsOf: %v", err)
+	}
+	if sum != 400.0 {
+		t.Errorf("expected sum 400, got %v", sum)
+	}
+	if max != 300.0 {
+		t.Errorf("expected max 300, got %v", max)
+	}
+	// prev event strictly before base+10s is a1 at base.
+	if d := prevTs.Sub(base); d < -time.Second || d > time.Second {
+		t.Errorf("expected prevTs ~base, got %v (base %v)", prevTs, base)
+	}
+}
