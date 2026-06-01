@@ -6,6 +6,16 @@ All significant changes, in reverse chronological order.
 
 ## [Unreleased]
 
+### Added (2026-05-31 — Trifecta Step 5a, ML fraud scorer)
+- `internal/mlfeatures` — authoritative feature builder (transaction-time point-in-time aggregates), used by both online serving and the offline export, guaranteeing train/serve parity (no skew).
+- `db.CountUserEventsAsOf` / `db.UserAmountStatsAsOf` — ts-based point-in-time aggregate queries (migration `004` indexes `events(user_id, ts)`).
+- `cmd/export-features` — batch export of labeled events → `ml/data/features.csv` via the shared builder.
+- `ml/` — conda env (Python 3.12), `train.py` (XGBoost → ONNX, temporal split, frequency/one-hot encoder), `evaluate.py` → `docs/ML_EVALUATION.md`. **ONNX serving matches XGBoost to 3.4e-8.**
+- `services/ml-scorer` — Python gRPC service (`:9097`, metrics `:9098`) serving the ONNX model; `proto/scorer/v1/scorer.proto` + Go client `internal/adapters/scorer`.
+- `fraud.Engine.EvaluateWithScorer` — blends `FLAG if (any rule) OR (ml_score ≥ τ)`; **fail-open** to rules-only on any scorer error. Wired into `fraud-grpc` (sync) and the async processor.
+- `EvaluateResponse.ml_score` (proto field 5); `evaluated_by` gains a `+ml-<version>` suffix when the scorer contributes.
+- **Verified live:** `EvaluateTransaction` returns `ml_score` with `evaluated_by=fluxa-rules-v1.0+ml-v1` at 7–20ms warm; cold-start first call fails open correctly. Headline PR-AUC 0.132 (CI 0.116–0.151) vs amount-only 0.043 — honest serve-parity result (H1/H15).
+
 ### Added (2026-05-31 — Trifecta Step 4, SSE fraud feed)
 - `domain.FraudEvent` — new type joining `fraud_flags` + `events` for the SSE wire format (flag_id, event_id, user_id, amount, currency, merchant, rule_name, rule_value, flagged_at).
 - `db.GetRecentFraudEvents(limit int)` — returns the `limit` most recent fraud events (JOIN fraud_flags + events, DESC order) for cold-load replay on SSE connect.

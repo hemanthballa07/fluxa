@@ -140,6 +140,21 @@ Full chain proven: `bankops POST(99999) → Fluxa gRPC (26ms, OK) → HELD → P
 `bankops POST(47500) → Fluxa gRPC FLAG (24ms) → 202/HELD → P1 SupportCase → SSE feed (matching correlation_id) → console release (CORS, Origin :3001) → RELEASED`.
 Three bankops-side blockers surfaced and fixed in the `bankops-portal` repo (Fluxa needed zero changes): security `PathPattern` 500 on `/accounts/**` (mid-`**` illegal in Spring `PathPattern`), missing CORS for the `:3001` console origin, and no local seed data (in-memory H2 wiped account 1 on every restart → added `@Profile("local")` `LocalDataSeeder`).
 
+### Trifecta Step 5a (ML scorer core) — 2026-05-31, DONE & VERIFIED
+
+Spec `docs/specs/2026-05-31-ml-scorer-design.md` (brainstormed + 2-round critique/patch loop → converged). Plan `docs/plans/2026-05-31-ml-scorer-5a.md`.
+
+- [x] `mlfeatures` builder + `events(user_id, ts)` index + ts point-in-time DB queries
+- [x] `cmd/export-features` (shared builder → CSV) ; IEEE-CIS replay → 216k labeled rows
+- [x] `ml/train.py` XGBoost → ONNX (parity to **3.4e-8**), `ml/evaluate.py` → `docs/ML_EVALUATION.md`
+- [x] `services/ml-scorer` Python ONNX gRPC service (`:9097`) + Go client adapter
+- [x] `fraud.Engine.EvaluateWithScorer` blend + **fail-open**; wired into fraud-grpc + processor; `EvaluateResponse.ml_score`
+- [x] Verified live: `ml_score` flows, `evaluated_by=…+ml-v1`, 7–20ms warm, cold-start fails open; integration suite green (0 SKIP)
+
+**Honest result (H1/H15):** PR-AUC 0.132 (CI 0.116–0.151) on serve-parity features — modest by design; amount-only ablation 0.043 confirms real lift. Full-data retrain (full replay → `make export-features train`) is the documented quality lever (zero code change).
+
+**Next: Step 5b** — persist `ml_score` (fraud_flags) → SSE `FraudEvent` → console fraud feed renders the score.
+
 ## Next
 
 Decision agreed with bankops (2026-05-31): **Option B — new `trifecta-console` Next.js standalone repo** covering fraud feed (SSE from Fluxa), bank ops actions (REST → bankops), rate-limit telemetry (Prometheus → fluxguard). ~5-6 screens, ~1 week target. Step 5 (ML scorer) planning parallel, no implementation until console MVP is demoed.
