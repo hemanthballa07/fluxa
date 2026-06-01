@@ -6,6 +6,14 @@ All significant changes, in reverse chronological order.
 
 ## [Unreleased]
 
+### Added (2026-06-01 — Trifecta Step 6a, OpenTelemetry tracing)
+- `jaeger` (jaegertracing/all-in-one:1.62.0) added to Docker Compose — OTLP gRPC `:4317`, OTLP HTTP `:4318`, UI `:16686`; `COLLECTOR_OTLP_ENABLED=true`.
+- `internal/observability/tracing.go` — shared, **fail-open** OTel init: OTLP/gRPC exporter (`OTEL_EXPORTER_OTLP_ENDPOINT`, default `jaeger:4317`, insecure, scheme-stripped) → `TracerProvider` (AlwaysSample) + W3C trace-context propagator; returns a `shutdown(ctx)` flush func. Init failure logs and returns a no-op — tracing never blocks the pipeline.
+- `fraud-grpc` server instrumented with the otelgrpc `StatsHandler` (server span per RPC) + span flush after graceful drain; the Go scorer client (`internal/adapters/scorer`) instrumented with the otelgrpc client `StatsHandler` (injects W3C `traceparent` into outgoing gRPC metadata).
+- `services/ml-scorer` (Python) runs the OTel SDK + `opentelemetry-instrumentation-grpc` server interceptor (extracts `traceparent`) + an explicit W3C propagator and a manual `Score` span; deps pinned `opentelemetry-{sdk,exporter-otlp-proto-grpc}==1.29.0`, `opentelemetry-instrumentation-grpc==0.50b0`.
+- OTel Go deps pinned for Go 1.22: `go.opentelemetry.io/otel` (+`sdk`, OTLP/gRPC exporter) `v1.34.0`, `otelgrpc` contrib `v0.59.0`. Newer lines require Go ≥1.23/1.25 — do **not** `go mod tidy`-bump them (mirrors the existing `protoc-gen-go` Go-1.22 pin discipline).
+- **Verified live:** firing `EvaluateTransaction` produces a single connected trace in Jaeger — `fraud-grpc: EvaluateTransaction` (server) → `fraud-grpc: Scorer/Score` (client) → `ml-scorer: Scorer/Score` (server) → `ml-scorer: Score` (internal) — proving Go→Python W3C `traceparent` propagation. Fail-open confirmed (eval returns normally with jaeger stopped). Integration suite green (0 SKIP), `gofmt -l .` empty, `golangci-lint` clean. Scope: 6a is fluxa-internal only; bankops cross-service (6b) and the per-hop Grafana dashboard + `BENCHMARKS.md` (6c) remain.
+
 ### Added (2026-05-31 — Trifecta Step 5a, ML fraud scorer)
 - `internal/mlfeatures` — authoritative feature builder (transaction-time point-in-time aggregates), used by both online serving and the offline export, guaranteeing train/serve parity (no skew).
 - `db.CountUserEventsAsOf` / `db.UserAmountStatsAsOf` — ts-based point-in-time aggregate queries (migration `004` indexes `events(user_id, ts)`).

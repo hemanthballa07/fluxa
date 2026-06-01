@@ -155,6 +155,19 @@ Spec `docs/specs/2026-05-31-ml-scorer-design.md` (brainstormed + 2-round critiqu
 
 **Step 5b — DONE (2026-05-31):** `ml_score` persisted on `fraud_flags` (migration `005`) → carried through `domain.FraudFlag`/`FraudEvent`/`AlertMessage` → stamped by processor + fraud-grpc → SSE `/fraud-events` wire format → `trifecta-console` fraud feed renders an **ML** risk column (commit `8c90050`). Verified: SSE emits `"ml_score"` on freshly-scored flags.
 
+### Trifecta Step 6a (fluxa-internal OTel tracing) — 2026-06-01, DONE & VERIFIED
+
+Plan `docs/plans/2026-06-01-otel-tracing-6a.md` (brainstorm spec → 2-round critique/patch loop → READY → implemented).
+
+- [x] `jaeger` all-in-one in compose (OTLP `:4317`/`:4318`, UI `:16686`)
+- [x] `internal/observability` shared fail-open OTel init (OTLP/gRPC exporter + W3C propagator + shutdown flush; TDD unit test)
+- [x] `fraud-grpc` server + Go scorer client instrumented with otelgrpc StatsHandlers (W3C `traceparent` propagation)
+- [x] Python `ml-scorer` OTel SDK + grpc server interceptor + explicit W3C propagator + manual `Score` span
+- [x] OTel Go deps pinned for Go 1.22 (`otel` v1.34.0 / `otelgrpc` v0.59.0); Python deps pinned (`opentelemetry-sdk` 1.29.0 / instrumentation-grpc 0.50b0)
+- [x] **Verified live:** connected Go→Python trace in Jaeger (`EvaluateTransaction` → `Scorer/Score` client → `ml-scorer Scorer/Score` server → `Score`); fail-open holds with jaeger down; integration suite 0 SKIP; gofmt + golangci-lint clean.
+
+Remaining Step 6: **6b** (bankops Spring OTel + `traceparent` over the bankops→fluxa gRPC — needs the bankops session) and **6c** (console browser spans, per-hop p50/p95/p99 Grafana dashboard, `BENCHMARKS.md`).
+
 ## Next
 
 Decision agreed with bankops (2026-05-31): **Option B — new `trifecta-console` Next.js standalone repo** covering fraud feed (SSE from Fluxa), bank ops actions (REST → bankops), rate-limit telemetry (Prometheus → fluxguard). ~5-6 screens, ~1 week target. Step 5 (ML scorer) planning parallel, no implementation until console MVP is demoed.
