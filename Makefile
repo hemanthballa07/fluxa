@@ -98,6 +98,16 @@ proto:
 	       --go-grpc_out=. --go-grpc_opt=module=github.com/fluxa/fluxa \
 	       proto/scorer/v1/scorer.proto
 
+# ── ML scorer pipeline (Step 5) ──────────────────────────────
+export-features: ## export ML training features from the events table -> ml/data/features.csv
+	go run ./cmd/export-features
+
+train: ## train XGBoost + export ONNX/encoder artifacts (conda env fluxa-ml)
+	conda run -n fluxa-ml python ml/train.py
+
+ml-eval: ## evaluate the model and regenerate docs/ML_EVALUATION.md
+	conda run -n fluxa-ml python ml/evaluate.py
+
 # Run k6 SLO check against fraud-grpc (requires service up via `make up`)
 k6-fraud:
 	k6 run scripts/k6/fraud_grpc_p99.js
