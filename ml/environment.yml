@@ -1,0 +1,14 @@
+name: fluxa-ml
+channels: [conda-forge]
+dependencies:
+  - python=3.12
+  - scikit-learn
+  - pandas
+  - pyarrow
+  - numpy
+  - pip
+  - pip:
+      - xgboost==2.1.*
+      - onnxmltools
+      - onnxruntime
+      - skl2onnx
