@@ -59,3 +59,4 @@ data/
 
 # Understand Anything generated knowledge graph
 .understand-anything/
+/export-features
