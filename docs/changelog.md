@@ -15,6 +15,7 @@ All significant changes, in reverse chronological order.
 - `fraud.Engine.EvaluateWithScorer` — blends `FLAG if (any rule) OR (ml_score ≥ τ)`; **fail-open** to rules-only on any scorer error. Wired into `fraud-grpc` (sync) and the async processor.
 - `EvaluateResponse.ml_score` (proto field 5); `evaluated_by` gains a `+ml-<version>` suffix when the scorer contributes.
 - **Verified live:** `EvaluateTransaction` returns `ml_score` with `evaluated_by=fluxa-rules-v1.0+ml-v1` at 7–20ms warm; cold-start first call fails open correctly. Headline PR-AUC 0.132 (CI 0.116–0.151) vs amount-only 0.043 — honest serve-parity result (H1/H15).
+- **Step 5b — surfaced the score:** migration `005` adds `ml_score` to `fraud_flags`; `domain.FraudFlag`/`FraudEvent`/`AlertMessage` carry it; the processor + fraud-grpc stamp each flag with the event's score; the SSE `/fraud-events` wire format gains `ml_score`; the `trifecta-console` fraud feed renders an **ML** risk column. Verified: SSE now emits `"ml_score":0.028…` on freshly-scored flags.
 
 ### Added (2026-05-31 — Trifecta Step 4, SSE fraud feed)
 - `domain.FraudEvent` — new type joining `fraud_flags` + `events` for the SSE wire format (flag_id, event_id, user_id, amount, currency, merchant, rule_name, rule_value, flagged_at).

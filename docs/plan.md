@@ -153,7 +153,7 @@ Spec `docs/specs/2026-05-31-ml-scorer-design.md` (brainstormed + 2-round critiqu
 
 **Honest result (H1/H15):** PR-AUC 0.132 (CI 0.116–0.151) on serve-parity features — modest by design; amount-only ablation 0.043 confirms real lift. Full-data retrain (full replay → `make export-features train`) is the documented quality lever (zero code change).
 
-**Next: Step 5b** — persist `ml_score` (fraud_flags) → SSE `FraudEvent` → console fraud feed renders the score.
+**Step 5b — DONE (2026-05-31):** `ml_score` persisted on `fraud_flags` (migration `005`) → carried through `domain.FraudFlag`/`FraudEvent`/`AlertMessage` → stamped by processor + fraud-grpc → SSE `/fraud-events` wire format → `trifecta-console` fraud feed renders an **ML** risk column (commit `8c90050`). Verified: SSE emits `"ml_score"` on freshly-scored flags.
 
 ## Next
 
