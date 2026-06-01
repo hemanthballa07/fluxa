@@ -22,3 +22,7 @@ scrape_configs:
   - job_name: fluxa-fraud-grpc
     static_configs:
       - targets: ["fraud-grpc:9096"]
+
+  - job_name: fluxa-ml-scorer
+    static_configs:
+      - targets: ["ml-scorer:9098"]
