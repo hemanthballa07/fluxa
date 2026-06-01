@@ -90,7 +90,9 @@ services:
       dockerfile: services/ingest/Dockerfile
     container_name: fluxa-ingest
     ports:
-      - "8080:8080"
+      # Host 8088 (container 8080) to avoid colliding with bankops-portal on host :8080.
+      # Replay reaches ingest via the internal network (INGEST_URL=http://ingest:8080); this host port is debug-only.
+      - "8088:8080"
       - "9091:9091"
     environment:
       DB_HOST: postgres
