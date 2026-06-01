@@ -1,12 +1,14 @@
 package fraud
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/fluxa/fluxa/internal/domain"
 	"github.com/fluxa/fluxa/internal/logging"
+	"github.com/fluxa/fluxa/internal/mlfeatures"
 )
 
 // mockQuerier implements VelocityQuerier without a real database.
@@ -17,6 +19,78 @@ type mockQuerier struct {
 
 func (m *mockQuerier) CountRecentEvents(_ string, _ int) (int, error) {
 	return m.count, m.err
+}
+
+// mockQuerier also satisfies mlfeatures.FeatureQuerier so it can back EvaluateWithScorer.
+func (m *mockQuerier) CountUserEventsAsOf(_ string, _ time.Time, _ int) (int, error) {
+	return m.count, m.err
+}
+
+func (m *mockQuerier) UserAmountStatsAsOf(_ string, _ time.Time, _ int) (float64, float64, time.Time, error) {
+	return 0, 0, time.Time{}, m.err
+}
+
+// fakeScorer implements fraud.Scorer for blend / fail-open tests.
+type fakeScorer struct {
+	score   float64
+	version string
+	err     error
+}
+
+func (f fakeScorer) Score(_ context.Context, _ mlfeatures.Features) (float64, string, error) {
+	return f.score, f.version, f.err
+}
+
+func hasRule(flags []domain.FraudFlag, name string) bool {
+	for _, fl := range flags {
+		if fl.RuleName == name {
+			return true
+		}
+	}
+	return false
+}
+
+func TestEvaluateWithScorerBlendsMLRisk(t *testing.T) {
+	eng := newTestEngine(domain.RulesConfig{}) // no rules fire
+	eng.Tau = 0.5
+	flags, score, ver, err := eng.EvaluateWithScorer(context.Background(), baseEvent(), &mockQuerier{}, fakeScorer{score: 0.9, version: "v1"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if ver != "v1" || score != 0.9 {
+		t.Errorf("score/ver: got %v/%q", score, ver)
+	}
+	if !hasRule(flags, "ml_risk") {
+		t.Errorf("expected ml_risk flag, got %+v", flags)
+	}
+}
+
+func TestEvaluateWithScorerFailsOpen(t *testing.T) {
+	eng := newTestEngine(domain.RulesConfig{AmountThreshold: 500})
+	eng.Tau = 0.5
+	ev := baseEvent()
+	ev.Amount = 99999
+	flags, score, ver, err := eng.EvaluateWithScorer(context.Background(), ev, &mockQuerier{}, fakeScorer{err: errors.New("scorer down")})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if ver != "unavailable" || score != 0 {
+		t.Errorf("expected fail-open (unavailable/0), got %v/%q", score, ver)
+	}
+	if !hasRule(flags, "amount_threshold") {
+		t.Errorf("rules should still decide on fail-open, got %+v", flags)
+	}
+	if hasRule(flags, "ml_risk") {
+		t.Errorf("no ml_risk flag expected on fail-open")
+	}
+}
+
+func TestEvaluateWithScorerNilScorer(t *testing.T) {
+	eng := newTestEngine(domain.RulesConfig{})
+	_, score, ver, err := eng.EvaluateWithScorer(context.Background(), baseEvent(), &mockQuerier{}, nil)
+	if err != nil || ver != "unavailable" || score != 0 {
+		t.Errorf("nil scorer should be rules-only/unavailable, got %v/%q err=%v", score, ver, err)
+	}
 }
 
 func newTestEngine(rules domain.RulesConfig) *Engine {

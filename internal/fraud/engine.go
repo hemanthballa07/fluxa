@@ -1,12 +1,14 @@
 package fraud
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/fluxa/fluxa/internal/domain"
 	"github.com/fluxa/fluxa/internal/logging"
+	"github.com/fluxa/fluxa/internal/mlfeatures"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
@@ -16,10 +18,25 @@ type VelocityQuerier interface {
 	CountRecentEvents(userID string, windowSeconds int) (int, error)
 }
 
+// Scorer returns an ML fraud score for an event's features. Implemented by the gRPC
+// scorer client adapter; a no-op/fake is used when the scorer is unavailable or in tests.
+type Scorer interface {
+	Score(ctx context.Context, f mlfeatures.Features) (score float64, modelVersion string, err error)
+}
+
+// EvalQuerier is what EvaluateWithScorer needs: rules velocity + ML feature aggregates.
+type EvalQuerier interface {
+	VelocityQuerier
+	mlfeatures.FeatureQuerier
+}
+
 // Engine evaluates fraud rules against an event.
 type Engine struct {
 	rules  domain.RulesConfig
 	logger *logging.Logger
+	// Tau is the ML blend threshold: an "ml_risk" flag is appended when score >= Tau.
+	// Zero disables the ml_risk flag (the score is still computed and returned).
+	Tau float64
 }
 
 // NewEngine reads rulesFilePath (YAML), parses it into RulesConfig, and returns an Engine.
@@ -114,4 +131,36 @@ func (e *Engine) Evaluate(event *domain.Event, db VelocityQuerier) ([]domain.Fra
 	}
 
 	return flags, nil
+}
+
+// EvaluateWithScorer runs the rules (via Evaluate), then builds features and calls the
+// ML scorer, blending: an "ml_risk" flag is appended when score >= Tau. Fail-open: any
+// feature-build or scorer error returns the rules-only flags with modelVersion
+// "unavailable" and score 0 — the fraud decision is never blocked by the scorer.
+func (e *Engine) EvaluateWithScorer(ctx context.Context, event *domain.Event, q EvalQuerier, scorer Scorer) (flags []domain.FraudFlag, score float64, modelVersion string, err error) {
+	flags, _ = e.Evaluate(event, q)
+	if scorer == nil {
+		return flags, 0, "unavailable", nil
+	}
+	f, ferr := mlfeatures.Build(ctx, event, q)
+	if ferr != nil {
+		e.logger.Error("ML feature build failed; rules-only", ferr, map[string]interface{}{"event_id": event.EventID})
+		return flags, 0, "unavailable", nil
+	}
+	s, ver, serr := scorer.Score(ctx, f)
+	if serr != nil {
+		e.logger.Warn("ML scorer unavailable; rules-only", map[string]interface{}{"event_id": event.EventID, "error": serr.Error()})
+		return flags, 0, "unavailable", nil
+	}
+	if e.Tau > 0 && s >= e.Tau {
+		flags = append(flags, domain.FraudFlag{
+			FlagID:    uuid.New().String(),
+			EventID:   event.EventID,
+			UserID:    event.UserID,
+			RuleName:  "ml_risk",
+			RuleValue: fmt.Sprintf("ml_score=%.4f >= tau=%.4f (model=%s)", s, e.Tau, ver),
+			FlaggedAt: time.Now().UTC(),
+		})
+	}
+	return flags, s, ver, nil
 }
