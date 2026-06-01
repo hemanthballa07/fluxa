@@ -3,3 +3,6 @@ grpcio-tools==1.68.*
 onnxruntime
 numpy
 prometheus-client
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-grpc==1.29.0
+opentelemetry-instrumentation-grpc==0.50b0

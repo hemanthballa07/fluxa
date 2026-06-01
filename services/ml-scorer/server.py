@@ -20,9 +20,35 @@ from prometheus_client import Counter, Histogram, start_http_server
 
 import scorer_pb2
 import scorer_pb2_grpc
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.grpc import server_interceptor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 SCORE_TOTAL = Counter("scorer_score_total", "Score RPCs", ["status"])
 SCORE_LAT = Histogram("scorer_score_latency_seconds", "Score latency seconds")
+
+
+def init_tracing(service_name="ml-scorer"):
+    """Install an OTLP/gRPC tracer provider + W3C propagator. Fail-open: never blocks serving."""
+    from opentelemetry.propagate import set_global_textmap
+    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "jaeger:4317")
+    endpoint = endpoint.replace("http://", "").replace("https://", "")
+    try:
+        provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
+        provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
+        )
+        trace.set_tracer_provider(provider)
+        # Symmetric with the Go side: pin the W3C traceparent propagator so the
+        # incoming Go client span parents this server's spans (don't rely on the
+        # default global propagator staying W3C across dependency bumps).
+        set_global_textmap(TraceContextTextMapPropagator())
+    except Exception as e:  # noqa: BLE001 — tracing must never block the scorer
+        print(f"tracing init failed, serving without traces: {e}", flush=True)
 
 
 class Encoder:
@@ -54,23 +80,25 @@ class ScorerServicer(scorer_pb2_grpc.ScorerServicer):
     def __init__(self, sess, enc):
         self.sess = sess
         self.enc = enc
+        self.tracer = trace.get_tracer("ml-scorer")
 
     def Score(self, request, context):
         start = time.time()
-        try:
-            x = self.enc.vector(request)
-            out = self.sess.run([self.enc.onnx_prob_output], {self.enc.onnx_input: x})[0]
-            arr = np.asarray(out)
-            score = float(arr[0, self.enc.onnx_prob_index]) if arr.ndim == 2 else float(arr.ravel()[0])
-            SCORE_TOTAL.labels(status="ok").inc()
-            return scorer_pb2.ScoreResponse(ml_score=score, model_version=self.enc.model_version)
-        except Exception as e:  # noqa: BLE001 — surface as gRPC error; caller fails open
-            SCORE_TOTAL.labels(status="error").inc()
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(str(e))
-            return scorer_pb2.ScoreResponse()
-        finally:
-            SCORE_LAT.observe(time.time() - start)
+        with self.tracer.start_as_current_span("Score"):
+            try:
+                x = self.enc.vector(request)
+                out = self.sess.run([self.enc.onnx_prob_output], {self.enc.onnx_input: x})[0]
+                arr = np.asarray(out)
+                score = float(arr[0, self.enc.onnx_prob_index]) if arr.ndim == 2 else float(arr.ravel()[0])
+                SCORE_TOTAL.labels(status="ok").inc()
+                return scorer_pb2.ScoreResponse(ml_score=score, model_version=self.enc.model_version)
+            except Exception as e:  # noqa: BLE001 — surface as gRPC error; caller fails open
+                SCORE_TOTAL.labels(status="error").inc()
+                context.set_code(grpc.StatusCode.INTERNAL)
+                context.set_details(str(e))
+                return scorer_pb2.ScoreResponse()
+            finally:
+                SCORE_LAT.observe(time.time() - start)
 
 
 def main():
@@ -85,8 +113,12 @@ def main():
     sess = ort.InferenceSession(os.path.join(args.artifacts, "model.onnx"),
                                 providers=["CPUExecutionProvider"])
 
+    init_tracing()
     start_http_server(args.metrics_port)
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=8),
+        interceptors=[server_interceptor()],
+    )
     scorer_pb2_grpc.add_ScorerServicer_to_server(ScorerServicer(sess, enc), server)
     server.add_insecure_port(f"[::]:{args.port}")
     server.start()
