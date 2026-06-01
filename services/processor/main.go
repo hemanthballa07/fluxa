@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	minioadapter "github.com/fluxa/fluxa/internal/adapters/minio"
 	prommetrics "github.com/fluxa/fluxa/internal/adapters/prometheus"
 	"github.com/fluxa/fluxa/internal/adapters/rabbitmq"
+	scoreradapter "github.com/fluxa/fluxa/internal/adapters/scorer"
 	"github.com/fluxa/fluxa/internal/config"
 	"github.com/fluxa/fluxa/internal/db"
 	"github.com/fluxa/fluxa/internal/domain"
@@ -55,12 +58,33 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ML scorer (best-effort, fail-open) — mirrors fraud-grpc. Scores async/replay
+	// events where the model has the most signal (the IEEE-CIS distribution).
+	scorerEndpoint := os.Getenv("SCORER_ENDPOINT")
+	if scorerEndpoint == "" {
+		scorerEndpoint = "ml-scorer:9097"
+	}
+	fraudEngine.Tau = 0.87
+	if t := os.Getenv("SCORER_TAU"); t != "" {
+		if v, perr := strconv.ParseFloat(t, 64); perr == nil {
+			fraudEngine.Tau = v
+		}
+	}
+	var fraudScorer fraud.Scorer
+	if sc, scErr := scoreradapter.NewClient(scorerEndpoint, 40*time.Millisecond); scErr != nil {
+		logger.Warn("ML scorer client init failed; rules-only", map[string]interface{}{"error": scErr.Error()})
+	} else {
+		defer sc.Close()
+		fraudScorer = sc
+	}
+
 	proc := &processor.Processor{
 		DB:          dbClient,
 		Idempotency: idempotency.NewClient(dbClient.GetDB()),
 		Storage:     minioClient,
 		Publisher:   mqClient,
 		Fraud:       fraudEngine,
+		Scorer:      fraudScorer,
 		Metrics:     prommetrics.NewMetrics("processor"),
 		Logger:      logger,
 	}

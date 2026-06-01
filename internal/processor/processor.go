@@ -23,6 +23,7 @@ type Processor struct {
 	Storage     ports.Storage   // MinIO adapter
 	Publisher   ports.Publisher // RabbitMQ adapter (alerts exchange)
 	Fraud       *fraud.Engine
+	Scorer      fraud.Scorer // optional ML scorer; nil => rules-only (fail-open)
 	Metrics     ports.Metrics
 	Logger      *logging.Logger
 }
@@ -144,7 +145,7 @@ func (p *Processor) evaluateFraud(ctx context.Context, event *domain.Event) {
 	if p.Fraud == nil {
 		return
 	}
-	flags, err := p.Fraud.Evaluate(event, p.DB)
+	flags, _, _, err := p.Fraud.EvaluateWithScorer(ctx, event, p.DB, p.Scorer)
 	if err != nil {
 		p.Logger.Error("Fraud evaluation error", err)
 		return
