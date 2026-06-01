@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	prommetrics "github.com/fluxa/fluxa/internal/adapters/prometheus"
+	scoreradapter "github.com/fluxa/fluxa/internal/adapters/scorer"
 	"github.com/fluxa/fluxa/internal/config"
 	"github.com/fluxa/fluxa/internal/db"
 	"github.com/fluxa/fluxa/internal/fraud"
@@ -52,6 +54,27 @@ func main() {
 
 	metrics := prommetrics.NewMetrics("fraud-grpc")
 	srv := fraudeval.NewServer(engine, dbClient, metrics, logger, version)
+
+	// Wire the ML scorer (best-effort, fail-open). The client dials lazily, so a
+	// missing scorer never blocks startup; a per-call timeout bounds the hot path.
+	scorerEndpoint := os.Getenv("SCORER_ENDPOINT")
+	if scorerEndpoint == "" {
+		scorerEndpoint = "ml-scorer:9097"
+	}
+	tau := 0.87
+	if t := os.Getenv("SCORER_TAU"); t != "" {
+		if v, perr := strconv.ParseFloat(t, 64); perr == nil {
+			tau = v
+		}
+	}
+	if sc, scErr := scoreradapter.NewClient(scorerEndpoint, 40*time.Millisecond); scErr != nil {
+		logger.Warn("ML scorer client init failed; rules-only", map[string]interface{}{"error": scErr.Error()})
+	} else {
+		defer sc.Close()
+		engine.Tau = tau
+		srv.Scorer = sc
+		logger.Info("ML scorer wired", map[string]interface{}{"endpoint": scorerEndpoint, "tau": tau})
+	}
 
 	go func() {
 		mux := http.NewServeMux()

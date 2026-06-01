@@ -71,6 +71,10 @@ message EvaluateResponse {
   // Example: "fluxa-rules-v1.2", "fluxa-rules+ml-v2.0". Lets callers track
   // when blended scoring becomes available.
   string evaluated_by = 4;
+
+  // ml_score is the blended ML fraud probability in [0,1] (0 when the scorer is
+  // unavailable; evaluated_by then omits the "+ml-<version>" suffix).
+  double ml_score = 5;
 }
 
 enum Decision {

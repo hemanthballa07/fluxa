@@ -26,6 +26,8 @@ type Server struct {
 	Metrics ports.Metrics
 	Logger  *logging.Logger
 	Version string
+	// Scorer is the optional ML scorer; nil => rules-only (fail-open). Set by main after NewServer.
+	Scorer fraud.Scorer
 }
 
 func NewServer(engine *fraud.Engine, dbClient *db.Client, metrics ports.Metrics, logger *logging.Logger, version string) *Server {
@@ -65,9 +67,9 @@ func (s *Server) EvaluateTransaction(ctx context.Context, req *fraudv1.EvaluateR
 		return nil, status.Error(codes.Unavailable, "failed to persist event")
 	}
 
-	flags, err := s.Engine.Evaluate(&event, s.DB)
+	flags, mlScore, modelVersion, err := s.Engine.EvaluateWithScorer(ctx, &event, s.DB, s.Scorer)
 	if err != nil {
-		s.Logger.Error("Engine.Evaluate failed", err, map[string]interface{}{"event_id": req.GetEventId()})
+		s.Logger.Error("Engine.EvaluateWithScorer failed", err, map[string]interface{}{"event_id": req.GetEventId()})
 		return nil, status.Error(codes.Internal, "fraud evaluation failed")
 	}
 
@@ -86,11 +88,17 @@ func (s *Server) EvaluateTransaction(ctx context.Context, req *fraudv1.EvaluateR
 	latencyMs := float64(latency.Microseconds()) / 1000.0
 	s.Metrics.ObserveHistogram("fraud_eval_latency_seconds", latency.Seconds(), "service", ServiceName)
 
+	evaluatedBy := s.Version
+	if modelVersion != "" && modelVersion != "unavailable" {
+		evaluatedBy = s.Version + "+ml-" + modelVersion
+	}
+
 	return &fraudv1.EvaluateResponse{
 		Decision:    decisionFromFlags(flags),
 		Flags:       toProtoFlags(flags),
 		LatencyMs:   latencyMs,
-		EvaluatedBy: s.Version,
+		EvaluatedBy: evaluatedBy,
+		MlScore:     mlScore,
 	}, nil
 }
 
