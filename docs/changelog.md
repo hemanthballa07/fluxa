@@ -6,6 +6,12 @@ All significant changes, in reverse chronological order.
 
 ## [Unreleased]
 
+### Added (2026-06-01 — Trifecta Step 6c, per-hop latency dashboard + BENCHMARKS)
+- `deploy/prometheus/prometheus.yml` — added scrape job `fluxa-ml-scorer` → `ml-scorer:9098` (the scorer's `scorer_score_latency_seconds` histogram was previously uncollected).
+- `deploy/grafana/dashboards/fluxa-latency-per-hop.json` — new auto-provisioned dashboard (uid `fluxa-latency-per-hop`): one panel per hop (ingest → processor → fraud-grpc eval → ml-scorer), each with p50/p95/p99 via `histogram_quantile()` over the existing `*_latency_seconds_bucket` series. Existing `fluxa-overview.json` untouched.
+- `BENCHMARKS.md` — k6 client-side + Prometheus per-hop latency under load (500-iter/s target, 30s, ML scorer warm). **Honest result:** the stack saturates at ~230 RPS on a single laptop (200-VU cap, ~840ms avg); the `p(99)<50ms` SLO (designed for Step-1 rules-only, 25.79ms) does not hold with ML in the path. The **ONNX scorer is not the bottleneck** (p99 20ms); the per-request DB feature-build in the eval path dominates (fraud-grpc p99 ≥2.5s — censored by the 2.5s histogram ceiling). Documented follow-ups: widen latency buckets, cache point-in-time aggregates.
+- Console/browser OTel spans dropped (YAGNI). Step 6 is now complete on the fluxa side (6a tracing + 6c dashboard/benchmarks); 6b (bankops cross-service `traceparent`) remains, owned by the bankops session.
+
 ### Added (2026-06-01 — Trifecta Step 6a, OpenTelemetry tracing)
 - `jaeger` (jaegertracing/all-in-one:1.62.0) added to Docker Compose — OTLP gRPC `:4317`, OTLP HTTP `:4318`, UI `:16686`; `COLLECTOR_OTLP_ENABLED=true`.
 - `internal/observability/tracing.go` — shared, **fail-open** OTel init: OTLP/gRPC exporter (`OTEL_EXPORTER_OTLP_ENDPOINT`, default `jaeger:4317`, insecure, scheme-stripped) → `TracerProvider` (AlwaysSample) + W3C trace-context propagator; returns a `shutdown(ctx)` flush func. Init failure logs and returns a no-op — tracing never blocks the pipeline.

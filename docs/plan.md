@@ -166,7 +166,16 @@ Plan `docs/plans/2026-06-01-otel-tracing-6a.md` (brainstorm spec → 2-round cri
 - [x] OTel Go deps pinned for Go 1.22 (`otel` v1.34.0 / `otelgrpc` v0.59.0); Python deps pinned (`opentelemetry-sdk` 1.29.0 / instrumentation-grpc 0.50b0)
 - [x] **Verified live:** connected Go→Python trace in Jaeger (`EvaluateTransaction` → `Scorer/Score` client → `ml-scorer Scorer/Score` server → `Score`); fail-open holds with jaeger down; integration suite 0 SKIP; gofmt + golangci-lint clean.
 
-Remaining Step 6: **6b** (bankops Spring OTel + `traceparent` over the bankops→fluxa gRPC — needs the bankops session) and **6c** (console browser spans, per-hop p50/p95/p99 Grafana dashboard, `BENCHMARKS.md`).
+### Trifecta Step 6c (per-hop latency dashboard + BENCHMARKS) — 2026-06-01, DONE & VERIFIED
+
+Plan `docs/plans/2026-06-01-otel-tracing-6c.md` (spec → 2-round critique/patch loop → READY → implemented). Built in parallel with bankops' 6b.
+
+- [x] `ml-scorer:9098` added to Prometheus scrape (scorer hop now collected; target `up`)
+- [x] `fluxa-latency-per-hop` Grafana dashboard — p50/p95/p99 per hop via `histogram_quantile` (4 panels render; fraud-grpc + scorer hops show real data)
+- [x] `BENCHMARKS.md` — k6 + Prometheus per-hop under load; honest finding: scorer is fast (p99 20ms), the DB feature-build eval path saturates at ~230 RPS on a laptop
+- [x] Console browser spans dropped (YAGNI)
+
+**Step 6 is complete on the fluxa side (6a tracing + 6c dashboard/benchmarks).** Remaining: **6b** (bankops Spring OTel + `traceparent` over the bankops→fluxa gRPC — owned by the bankops session; the fluxa fraud-grpc server already auto-extracts an incoming `traceparent`).
 
 ## Next
 
