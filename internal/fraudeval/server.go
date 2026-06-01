@@ -74,6 +74,7 @@ func (s *Server) EvaluateTransaction(ctx context.Context, req *fraudv1.EvaluateR
 	}
 
 	for _, flag := range flags {
+		flag.MlScore = mlScore
 		if dbErr := s.DB.InsertFraudFlag(&flag); dbErr != nil {
 			s.Logger.Error("InsertFraudFlag failed", dbErr, map[string]interface{}{
 				"event_id":  flag.EventID,

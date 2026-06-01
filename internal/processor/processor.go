@@ -145,13 +145,14 @@ func (p *Processor) evaluateFraud(ctx context.Context, event *domain.Event) {
 	if p.Fraud == nil {
 		return
 	}
-	flags, _, _, err := p.Fraud.EvaluateWithScorer(ctx, event, p.DB, p.Scorer)
+	flags, mlScore, _, err := p.Fraud.EvaluateWithScorer(ctx, event, p.DB, p.Scorer)
 	if err != nil {
 		p.Logger.Error("Fraud evaluation error", err)
 		return
 	}
 
 	for _, flag := range flags {
+		flag.MlScore = mlScore
 		if err := p.DB.InsertFraudFlag(&flag); err != nil {
 			p.Logger.Error("Failed to insert fraud flag", err, map[string]interface{}{
 				"rule_name": flag.RuleName,

@@ -150,8 +150,8 @@ func (c *Client) InsertFraudFlag(flag *domain.FraudFlag) error {
 	defer cancel()
 
 	query := `
-		INSERT INTO fraud_flags (flag_id, event_id, user_id, rule_name, rule_value, flagged_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO fraud_flags (flag_id, event_id, user_id, rule_name, rule_value, ml_score, flagged_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (flag_id) DO NOTHING
 	`
 
@@ -161,6 +161,7 @@ func (c *Client) InsertFraudFlag(flag *domain.FraudFlag) error {
 		flag.UserID,
 		flag.RuleName,
 		flag.RuleValue,
+		flag.MlScore,
 		flag.FlaggedAt,
 	)
 	if err != nil {
@@ -177,7 +178,7 @@ func (c *Client) GetRecentFraudEvents(limit int) ([]*domain.FraudEvent, error) {
 
 	query := `
 		SELECT ff.flag_id, ff.event_id, e.correlation_id, ff.user_id, e.amount, e.currency, e.merchant,
-		       ff.rule_name, ff.rule_value, ff.flagged_at
+		       ff.rule_name, ff.rule_value, ff.flagged_at, ff.ml_score
 		FROM fraud_flags ff
 		JOIN events e ON ff.event_id = e.event_id
 		ORDER BY ff.flagged_at DESC
@@ -195,7 +196,7 @@ func (c *Client) GetRecentFraudEvents(limit int) ([]*domain.FraudEvent, error) {
 		fe := &domain.FraudEvent{}
 		if err := rows.Scan(
 			&fe.FlagID, &fe.EventID, &fe.CorrelationID, &fe.UserID, &fe.Amount, &fe.Currency, &fe.Merchant,
-			&fe.RuleName, &fe.RuleValue, &fe.FlaggedAt,
+			&fe.RuleName, &fe.RuleValue, &fe.FlaggedAt, &fe.MlScore,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan fraud event: %w", err)
 		}
@@ -212,7 +213,7 @@ func (c *Client) GetFraudEventsSince(since time.Time) ([]*domain.FraudEvent, err
 
 	query := `
 		SELECT ff.flag_id, ff.event_id, e.correlation_id, ff.user_id, e.amount, e.currency, e.merchant,
-		       ff.rule_name, ff.rule_value, ff.flagged_at
+		       ff.rule_name, ff.rule_value, ff.flagged_at, ff.ml_score
 		FROM fraud_flags ff
 		JOIN events e ON ff.event_id = e.event_id
 		WHERE ff.flagged_at > $1
@@ -230,7 +231,7 @@ func (c *Client) GetFraudEventsSince(since time.Time) ([]*domain.FraudEvent, err
 		fe := &domain.FraudEvent{}
 		if err := rows.Scan(
 			&fe.FlagID, &fe.EventID, &fe.CorrelationID, &fe.UserID, &fe.Amount, &fe.Currency, &fe.Merchant,
-			&fe.RuleName, &fe.RuleValue, &fe.FlaggedAt,
+			&fe.RuleName, &fe.RuleValue, &fe.FlaggedAt, &fe.MlScore,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan fraud event: %w", err)
 		}

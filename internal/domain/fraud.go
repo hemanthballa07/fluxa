@@ -7,8 +7,9 @@ type FraudFlag struct {
 	FlagID    string // UUID primary key
 	EventID   string // FK → events.event_id
 	UserID    string
-	RuleName  string // "amount_threshold" | "velocity" | "blocked_merchant" | "high_risk_currency"
-	RuleValue string // human-readable: e.g. "amount=15000.00 > threshold=10000.00"
+	RuleName  string  // "amount_threshold" | "velocity" | "blocked_merchant" | "high_risk_currency" | "ml_risk"
+	RuleValue string  // human-readable: e.g. "amount=15000.00 > threshold=10000.00"
+	MlScore   float64 // blended ML fraud probability for the event (0 when scorer unavailable)
 	FlaggedAt time.Time
 }
 
@@ -19,6 +20,7 @@ type AlertMessage struct {
 	UserID    string    `json:"user_id"`
 	RuleName  string    `json:"rule_name"`
 	RuleValue string    `json:"rule_value"`
+	MlScore   float64   `json:"ml_score"`
 	FlaggedAt time.Time `json:"flagged_at"`
 }
 
@@ -33,5 +35,6 @@ type FraudEvent struct {
 	Merchant      string    `json:"merchant"`
 	RuleName      string    `json:"rule_name"`
 	RuleValue     string    `json:"rule_value"`
+	MlScore       float64   `json:"ml_score"`
 	FlaggedAt     time.Time `json:"flagged_at"`
 }
