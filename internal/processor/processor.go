@@ -190,6 +190,11 @@ func (p *Processor) evaluateFraud(ctx context.Context, event *domain.Event) {
 func (p *Processor) failPermanent(eventID, reason string) error {
 	p.Logger.Error("Permanent failure: "+reason, nil)
 	p.Metrics.IncCounter("events_processed_total", "service", "processor", "status", "failure")
-	_ = p.Idempotency.MarkFailed(eventID, reason)
+	if err := p.Idempotency.MarkFailed(eventID, reason); err != nil {
+		p.Logger.Warn("Failed to mark idempotency key as failed (best-effort)", map[string]interface{}{
+			"event_id": eventID,
+			"error":    err.Error(),
+		})
+	}
 	return nil
 }

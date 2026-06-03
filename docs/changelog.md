@@ -6,6 +6,9 @@ All significant changes, in reverse chronological order.
 
 ## [Unreleased]
 
+### Fixed (2026-06-03 — silent-failure hardening)
+- `internal/processor/processor.go` — `failPermanent` no longer silently discards a failed `idempotency.MarkFailed`. It now emits a structured `Warn` (`event_id`, `error`) so a transient DB failure on the best-effort poison-message mark leaves a trace instead of vanishing. Behavior unchanged (still best-effort; the poison message is still ACKed/discarded). Found via a Go error-handling audit — the rest of the pipeline's error handling (velocity-query log-and-skip, documented scorer fail-open, ctx convention) audited clean. `gofmt -l` empty, `go vet` + `golangci-lint` clean; `internal/processor` + `internal/idempotency` integration tests green with `-race`, 0 SKIP.
+
 ### Added (2026-06-01 — Trifecta Step 6c, per-hop latency dashboard + BENCHMARKS)
 - `deploy/prometheus/prometheus.yml` — added scrape job `fluxa-ml-scorer` → `ml-scorer:9098` (the scorer's `scorer_score_latency_seconds` histogram was previously uncollected).
 - `deploy/grafana/dashboards/fluxa-latency-per-hop.json` — new auto-provisioned dashboard (uid `fluxa-latency-per-hop`): one panel per hop (ingest → processor → fraud-grpc eval → ml-scorer), each with p50/p95/p99 via `histogram_quantile()` over the existing `*_latency_seconds_bucket` series. Existing `fluxa-overview.json` untouched.
