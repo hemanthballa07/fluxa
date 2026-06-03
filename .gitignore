@@ -54,10 +54,15 @@ out/
 # Dataset (Kaggle CSV — do not commit)
 data/
 
-# Claude Code session files
+# Local AI agent / assistant tooling, sessions, and planning artifacts
 .claude/
-
-# Understand Anything generated knowledge graph
-.understand-anything/
-/export-features
 CLAUDE.md
+skills/
+docs/plans/
+.understand-anything/
+
+# Python tooling cache (ml/)
+.ruff_cache/
+
+# Built binary (go build ./cmd/export-features)
+/export-features

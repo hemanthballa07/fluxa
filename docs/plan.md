@@ -69,7 +69,7 @@ Prometheus :9090   Grafana :3000
 - [x] Grafana dashboard auto-provisioned (traffic, fraud rate, DB-direct panels)
 - [x] PostgreSQL datasource and UID wiring fixed in Grafana provisioning
 - [x] 7-step local verification passing end-to-end
-- [x] README updated for local platform; `.claude/` gitignored
+- [x] README updated for local platform; local agent config gitignored
 
 ---
 
@@ -109,7 +109,7 @@ Prometheus :9090   Grafana :3000
 
 ### Trifecta Step 2 — bankops-portal calls Fluxa fraud-eval (2026-05-27)
 
-Implementation lives in the separate `bankops-portal` repo (see its `STATUS.md` and new `CLAUDE.md` for the full artefact list). Highlights:
+Implementation lives in the separate `bankops-portal` repo (see its `STATUS.md` for the full artefact list). Highlights:
 
 - [x] Proto vendored into `bankops-portal/backend/src/main/proto/fraud/v1/`; `protobuf-maven-plugin` + `os-maven-plugin` generate `com.fluxa.fraud.v1.*` stubs (gRPC 1.68.1, protobuf 3.25.5)
 - [x] New `com.bankops.portal.client.fluxa` package — sealed `FluxaEvalOutcome` (6 variants), `FluxaFraudClient`, `FluxaClientConfiguration`, `FluxaUnavailableException`, `FraudFlagDto`
@@ -119,7 +119,7 @@ Implementation lives in the separate `bankops-portal` repo (see its `STATUS.md` 
 - [x] `TransactionController` returns 202 for HELD; `GlobalExceptionHandler` maps `FluxaUnavailableException` → 503
 - [x] Tests green: `FluxaFraudClientTest` 6/6 (Mockito), `FraudGateIntegrationTest` 5/5 (`@SpringBootTest` + in-process gRPC), `ShadowModeFraudGateIntegrationTest` 1/1 (separate context with `shadow-mode=true`)
 - [x] Fixed pre-existing `AuditEventService.recordEvent` propagation MANDATORY → REQUIRED (unblocked the legacy `TransactionIntegrationTest` as a side-effect)
-- [x] `bankops-portal/CLAUDE.md` written from scratch (integration entrypoint, DoD, reliability invariants)
+- [x] `bankops-portal` integration entrypoint doc written from scratch (DoD, reliability invariants)
 - [ ] Manual demo (requires fluxa stack up): `curl -X POST localhost:8080/api/accounts/1/transactions … {"type":"DEPOSIT","amount":99999,…}` → expect 202 + HELD + HIGH-severity SupportCase
 
 ### Trifecta Step A — e2e verification (2026-05-30, CLOSED)

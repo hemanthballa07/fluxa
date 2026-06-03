@@ -82,7 +82,7 @@ The following sensitive patterns are gitignored:
 ```
 .env
 .env.local     # environment variable overrides
-.claude/       # Claude Code session files
+.claude/       # local AI agent session files
 data/          # Kaggle CSV datasets (large, contains PII-adjacent data)
 out/           # build artifacts and deployment outputs
 /replay        # compiled service binaries
