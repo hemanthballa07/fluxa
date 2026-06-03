@@ -6,6 +6,11 @@ All significant changes, in reverse chronological order.
 
 ## [Unreleased]
 
+### Changed (2026-06-03 — repo hygiene + docs)
+- Added `STATUS.md` (project source of truth), `CONTRIBUTING.md` (setup, full test run, conventions, DoD), `.dockerignore` (slimmer build context — keeps `ml/artifacts` for ml-scorer), and `.editorconfig`.
+- Refreshed `README.md` to the current architecture: `fraud-grpc`/`ml-scorer`/`jaeger` in the services table, the SSE `/fraud-events` endpoint + gRPC eval in the API, new ML-scoring and distributed-tracing sections, and a Documentation index.
+- Stopped tracking local agent tooling: untracked `skills/` and the third-party `out/fluxa_e2e_audit.md`; relocated `out/reporting_queries.sql` → `scripts/`; `.gitignore` now excludes `skills/`, `docs/plans/`, `.ruff_cache/`. Genericized tool-brand mentions in `docs/SECURITY.md` + `docs/plan.md`. Verified: `go build` + `gofmt` clean, `docker compose build query ml-scorer` succeeds with the new `.dockerignore`.
+
 ### Fixed (2026-06-03 — silent-failure hardening)
 - `internal/processor/processor.go` — `failPermanent` no longer silently discards a failed `idempotency.MarkFailed`. It now emits a structured `Warn` (`event_id`, `error`) so a transient DB failure on the best-effort poison-message mark leaves a trace instead of vanishing. Behavior unchanged (still best-effort; the poison message is still ACKed/discarded). Found via a Go error-handling audit — the rest of the pipeline's error handling (velocity-query log-and-skip, documented scorer fail-open, ctx convention) audited clean. `gofmt -l` empty, `go vet` + `golangci-lint` clean; `internal/processor` + `internal/idempotency` integration tests green with `-race`, 0 SKIP.
 

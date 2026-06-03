@@ -29,15 +29,18 @@ Prometheus :9090   Grafana :3000
 | Service | Port(s) | Description |
 |---------|---------|-------------|
 | ingest | 8080, 9091 | HTTP ingest + Prometheus metrics |
-| processor | 9092 | RabbitMQ consumer, fraud engine |
-| query | 8083, 9093 | HTTP query + Prometheus metrics |
+| processor | 9092 | RabbitMQ consumer, fraud engine + ML blend |
+| query | 8083, 9093 | HTTP query + SSE fraud feed + Prometheus metrics |
 | alert-consumer | 9094 | Logs fraud alerts from RabbitMQ fanout |
+| fraud-grpc | 9095, 9096 | Synchronous gRPC fraud-eval (bankops HELD-transaction gate) |
+| ml-scorer | 9097, 9098 | Python gRPC ONNX fraud scorer |
 | replay | — | Streams PaySim CSV at ~200 req/s |
 | postgres | 5432 | Events, idempotency keys, fraud flags |
 | rabbitmq | 5672, 15672 | Message broker + management UI |
 | minio | 9000, 9001 | S3-compatible storage for large payloads |
 | prometheus | 9090 | Metrics scraper |
-| grafana | 3000 | Dashboard (admin/admin) |
+| grafana | 3000 | Dashboards (admin/admin) |
+| jaeger | 16686, 4317 | Distributed-tracing UI + OTLP collector |
 
 ## Quick Start
 
@@ -87,14 +90,30 @@ high_risk_currencies:             # flag these currency codes
 
 All rules are evaluated independently (all-match, not first-match).
 
+## ML Scoring
+
+Beyond the YAML rules, the engine blends in an ML fraud score: an XGBoost model
+exported to ONNX and served by the Python `ml-scorer` gRPC service. The decision is
+`FLAG if (any rule matches) OR (ml_score ≥ τ)`. Scoring is **fail-open** — any
+feature-build or scorer error falls back to rules-only (`model_version=unavailable`),
+so a scorer outage never blocks the pipeline. Features are computed by a single shared
+builder (`internal/mlfeatures`) used by both online serving and the offline CSV export,
+guaranteeing train/serve parity. The blended `ml_score` is persisted on each
+`fraud_flags` row and surfaced on the SSE feed. See `docs/ML_EVALUATION.md`.
+
 ## API
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/events` | Ingest a transaction event → `202 {"event_id":"…","status":"enqueued"}` |
 | `GET` | `/events/:id` | Retrieve a persisted event → `200` or `404` |
+| `GET` | `/fraud-events` | SSE stream of fraud flags from the query service (`:8083`); `?limit=N` (default 50, max 500) |
 | `GET` | `/health` | Liveness check → `{"status":"ok"}` |
-| `GET` | `/metrics` | Prometheus scrape endpoint (on port 9091–9094) |
+| `GET` | `/metrics` | Prometheus scrape endpoint (on ports 9091–9098) |
+
+The `fraud-grpc` service additionally serves a synchronous gRPC `EvaluateTransaction`
+RPC on `:9095` (proto in `proto/fraud/v1/`), used by bankops-portal to gate
+HELD transactions.
 
 ## Makefile
 
@@ -104,7 +123,7 @@ make down     # Stop and remove containers
 make replay   # Start dataset replay (requires ./data/transactions.csv)
 make logs     # Follow logs for all services
 make ps       # Show container status
-make test     # Run Go unit tests
+make test     # Run Go tests (-race); DB integration tests skip without TEST_DB_DSN
 make lint     # Run golangci-lint
 make clean    # Stop containers and remove volumes
 ```
@@ -127,6 +146,14 @@ make clean    # Stop containers and remove volumes
 - Row 1 — Traffic: ingested rate, processed rate, p99 latency
 - Row 2 — Fraud: fraud rate %, flags by rule (bar), flags over time (line)
 - Row 3 — DB-direct: top flagged merchants, tx volume (5-min buckets), active flags by rule (pie)
+
+A second dashboard renders per-hop p50/p95/p99 latency (ingest → processor → fraud-grpc → ml-scorer).
+
+**Distributed tracing** — every service is instrumented with OpenTelemetry and exports
+to Jaeger (UI at `:16686`). W3C trace-context propagates across the Go → Python
+boundary, so a single trace spans `fraud-grpc` → `ml-scorer`. Tracing init is fail-open:
+if the collector is unreachable it falls back to a no-op and never blocks the pipeline.
+Load behavior is documented in [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ## Reliability
 
@@ -162,6 +189,13 @@ fluxa/
 └── docker-compose.yml      Full local stack
 ```
 
+## Documentation
+
+- [`STATUS.md`](STATUS.md) — current project status (source of truth)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev setup, running the full test suite, conventions, Definition of Done
+- [`BENCHMARKS.md`](BENCHMARKS.md) — load testing + per-hop latency under load
+- [`docs/`](docs/) — architecture, system design, reliability invariants, runbook, ML evaluation, design specs
+
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE).

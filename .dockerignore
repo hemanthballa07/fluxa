@@ -1,0 +1,35 @@
+# Build context exclusions. The Go service images are multi-stage (only the compiled
+# binary lands in the final image); ml-scorer copies ml/artifacts explicitly, so that
+# path is intentionally NOT excluded here.
+
+# VCS & CI
+.git
+.github
+.gitignore
+
+# Local agent tooling / sessions
+.claude
+CLAUDE.md
+skills
+.understand-anything
+.ruff_cache
+
+# Docs & non-build assets
+docs
+*.md
+LICENSE
+
+# Datasets & local output (never needed in an image build)
+data
+out
+dist
+tmp
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# Infrastructure-as-code (not part of any service image)
+infra
